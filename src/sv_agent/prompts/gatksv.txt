@@ -1,0 +1,50 @@
+# GATK-SV Prompts
+
+This file contains curated prompts for different GATK-SV modules and tools.
+
+## Module00a - Sample QC
+- Check sample quality metrics
+- Identify outliers based on coverage and insert size
+- Generate QC reports
+
+## Module00b - Evidence Gathering
+- Run Manta for SV discovery
+- Run MELT for MEI discovery
+- Collect read depth evidence
+- Collect discordant pair evidence
+- Collect split read evidence
+
+## Module00c - Batch QC
+- Aggregate sample metrics
+- Identify batch outliers
+- Generate batch-level QC reports
+
+## Module01 - Clustering
+- Cluster SV calls across samples
+- Apply site filters
+- Generate per-algorithm VCFs
+
+## Module02 - Merging
+- Merge algorithm-specific calls
+- Apply cross-algorithm filters
+- Generate merged VCF
+
+## Module03 - Filtering
+- Apply frequency filters
+- Apply quality filters
+- Generate filtered VCF
+
+## Module04 - Genotyping
+- Re-genotype SVs across all samples
+- Apply genotype filters
+- Generate final genotyped VCF
+
+## Module05 - Batch Effects
+- Identify and correct batch effects
+- Apply batch-specific filters
+- Generate batch-corrected VCF
+
+## Module06 - Annotation
+- Annotate with gene information
+- Annotate with known SV databases
+- Generate final annotated VCF

@@ -1,0 +1,33 @@
+{
+  "samples": [
+    {
+      "id": "SAMPLE001",
+      "bam": "/data/samples/SAMPLE001.bam",
+      "bai": "/data/samples/SAMPLE001.bam.bai"
+    },
+    {
+      "id": "SAMPLE002",
+      "bam": "/data/samples/SAMPLE002.bam",
+      "bai": "/data/samples/SAMPLE002.bam.bai"
+    },
+    {
+      "id": "SAMPLE003",
+      "bam": "/data/samples/SAMPLE003.bam",
+      "bai": "/data/samples/SAMPLE003.bam.bai"
+    }
+  ],
+  "reference": "/data/references/hg38/hg38.fa",
+  "output_dir": "/data/output/batch1",
+  "batch_metadata": {
+    "project": "SV_Discovery_2024",
+    "sequencing_center": "Example_Center",
+    "sequencing_platform": "Illumina",
+    "batch_id": "BATCH001"
+  },
+  "parameters": {
+    "min_sv_size": 50,
+    "max_sv_size": 10000000,
+    "min_quality": 30,
+    "algorithms": ["manta", "melt", "whamg", "delly"]
+  }
+}
