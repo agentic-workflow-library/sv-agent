@@ -1,0 +1,6 @@
+[submodule "awlkit"]
+	path = awlkit
+	url = https://github.com/agentic-workflow-library/awlkit.git
+[submodule "gatk-sv"]
+	path = gatk-sv
+	url = https://github.com/broadinstitute/gatk-sv.git
