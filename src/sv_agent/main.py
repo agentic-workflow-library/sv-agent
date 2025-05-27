@@ -139,6 +139,52 @@ Examples:
         help='Show detailed information'
     )
     
+    # Run command - execute CWL workflows
+    run_parser = subparsers.add_parser(
+        "run",
+        help="Execute a CWL workflow"
+    )
+    run_parser.add_argument(
+        "workflow",
+        type=Path,
+        help="Path to CWL workflow file"
+    )
+    run_parser.add_argument(
+        "inputs",
+        type=Path,
+        help="Path to inputs YAML/JSON file"
+    )
+    run_parser.add_argument(
+        '-o', '--output-dir',
+        type=Path,
+        help="Output directory (default: current directory)"
+    )
+    run_parser.add_argument(
+        '--no-container',
+        action='store_true',
+        help='Run without container (Docker/Singularity)'
+    )
+    run_parser.add_argument(
+        '--singularity',
+        action='store_true',
+        help='Use Singularity instead of Docker'
+    )
+    run_parser.add_argument(
+        '--podman',
+        action='store_true',
+        help='Use Podman instead of Docker'
+    )
+    run_parser.add_argument(
+        '--engine',
+        choices=['auto', 'cwltool', 'sevenbridges'],
+        default='auto',
+        help='Execution engine to use (default: auto)'
+    )
+    run_parser.add_argument(
+        '--sb-project',
+        help='Seven Bridges project ID (for sevenbridges engine)'
+    )
+    
     args = parser.parse_args()
     
     # Show help if no command
@@ -282,6 +328,110 @@ Examples:
             question = " ".join(args.question)
             response = chat.chat(question)
             print(response)
+        
+        elif args.command == "run":
+            # Execute CWL workflow
+            print(f"\n🚀 Executing workflow: {args.workflow.name}")
+            print("=" * 50)
+            
+            # Configure execution engine
+            execution_config = {}
+            
+            if args.engine == 'sevenbridges':
+                if not args.sb_project:
+                    print("Error: --sb-project is required for Seven Bridges engine", file=sys.stderr)
+                    sys.exit(1)
+                execution_config = {
+                    'preferred_engine': 'sevenbridges',
+                    'sevenbridges_config': {
+                        'project': args.sb_project
+                    }
+                }
+            elif args.engine == 'cwltool':
+                execution_config = {
+                    'preferred_engine': 'cwltool',
+                    'cwltool_config': {
+                        'no_container': args.no_container,
+                        'singularity': args.singularity,
+                        'podman': args.podman
+                    }
+                }
+            else:
+                # Auto mode
+                execution_config = {
+                    'preferred_engine': 'auto',
+                    'cwltool_config': {
+                        'no_container': args.no_container,
+                        'singularity': args.singularity,
+                        'podman': args.podman
+                    },
+                    'sevenbridges_config': {
+                        'project': args.sb_project
+                    } if args.sb_project else {}
+                }
+            
+            # Update agent configuration
+            agent.config['execution'] = execution_config
+            agent._setup_execution_engine()
+            
+            # Check engine availability
+            if not agent.execution_engine.is_available():
+                print("\n❌ No execution engine available!", file=sys.stderr)
+                print("\nTo execute workflows, you need one of:", file=sys.stderr)
+                print("  - cwltool: pip install cwltool", file=sys.stderr)
+                print("  - Seven Bridges CLI: https://docs.sevenbridges.com/docs/cli-overview", file=sys.stderr)
+                sys.exit(1)
+            
+            # Show engine info
+            engine_info = agent.execution_engine.get_engine_info()
+            print(f"Using engine: {engine_info.get('selected_engine', 'Unknown')}")
+            
+            # Validate workflow
+            print(f"\nValidating workflow...")
+            if agent.validate_workflow(args.workflow):
+                print("✓ Workflow validation passed")
+            else:
+                print("✗ Workflow validation failed", file=sys.stderr)
+                sys.exit(1)
+            
+            # Execute workflow
+            print(f"\nExecuting workflow...")
+            print(f"  Inputs: {args.inputs}")
+            if args.output_dir:
+                print(f"  Output: {args.output_dir}")
+            
+            result = agent.execute_workflow(
+                args.workflow,
+                args.inputs,
+                args.output_dir
+            )
+            
+            # Display results
+            print(f"\n{'='*50}")
+            print(f"Execution Status: {result.status.value}")
+            
+            if result.success:
+                print("\n✅ Workflow executed successfully!")
+                if result.outputs:
+                    print("\nOutputs:")
+                    for key, value in result.outputs.items():
+                        print(f"  {key}: {value}")
+                if result.duration_seconds:
+                    print(f"\nDuration: {result.duration_seconds:.1f} seconds")
+            else:
+                print("\n❌ Workflow execution failed!")
+                if result.errors:
+                    print("\nErrors:")
+                    for error in result.errors:
+                        print(f"  - {error}")
+            
+            if result.execution_id:
+                print(f"\nExecution ID: {result.execution_id}")
+            
+            if result.logs and args.verbose:
+                print(f"\nExecution logs:")
+                print("-" * 50)
+                print(result.logs)
     
     except Exception as e:
         logger.error(f"Error: {e}")

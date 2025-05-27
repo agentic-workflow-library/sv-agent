@@ -1,0 +1,65 @@
+FROM python:3.9-slim
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    git \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Ollama
+RUN curl -fsSL https://ollama.ai/install.sh | sh
+
+# Set working directory
+WORKDIR /app
+
+# Copy the entire project including submodules
+COPY . .
+
+# Initialize git submodules (if not already done)
+RUN git submodule update --init --recursive || true
+
+# Install Python dependencies
+RUN pip install --upgrade pip
+RUN pip install -e .
+RUN pip install -e submodules/awlkit/
+RUN pip install -e '.[ollama]'
+
+# Create outputs directory
+RUN mkdir -p outputs
+
+# Set environment variables
+ENV PYTHONUNBUFFERED=1
+ENV TERM=xterm-256color
+ENV OLLAMA_HOST=0.0.0.0
+ENV OLLAMA_MODELS=/root/.ollama/models
+
+# Create a startup script
+RUN echo '#!/bin/bash\n\
+set -e\n\
+\n\
+# Start Ollama server\n\
+ollama serve &\n\
+OLLAMA_PID=$!\n\
+\n\
+# Wait for Ollama to be ready\n\
+echo "Waiting for Ollama server to start..."\n\
+sleep 5\n\
+\n\
+# Check if gemma:2b model exists, pull if not\n\
+if ! ollama list | grep -q "gemma:2b"; then\n\
+    echo "Pulling gemma:2b model (this may take a few minutes on first run)..."\n\
+    ollama pull gemma:2b\n\
+else\n\
+    echo "gemma:2b model already available"\n\
+fi\n\
+\n\
+# Start sv-agent chat\n\
+echo "Starting sv-agent chat with gemma:2b..."\n\
+sv-agent chat --llm-provider ollama --ollama-model gemma:2b\n\
+\n\
+# Cleanup\n\
+kill $OLLAMA_PID 2>/dev/null || true\n\
+' > /app/start.sh && chmod +x /app/start.sh
+
+# Default command
+CMD ["/app/start.sh"]
