@@ -117,6 +117,8 @@ class SVKnowledgeBase:
         self.faq = {
             "What is GATK-SV?": "GATK-SV is a comprehensive pipeline developed by the Broad Institute for discovering structural variants (SVs) in whole-genome sequencing data. It uses multiple evidence types and algorithms to detect deletions, duplications, inversions, insertions, and complex rearrangements.",
             
+            "What is sv-agent?": "sv-agent is a tool that can: 1) Execute CWL workflows to run GATK-SV analysis on your genomic data, 2) Convert GATK-SV WDL workflows to CWL format, 3) Process BAM/CRAM files to detect structural variants, 4) Provide expert guidance on SV analysis. Use 'sv-agent run' to execute workflows.",
+            
             "What are structural variants?": "Structural variants (SVs) are genomic alterations larger than 50bp, including deletions (DEL), duplications (DUP), inversions (INV), insertions (INS), and translocations (BND). They contribute significantly to genetic diversity and disease.",
             
             "What input data do I need?": "You need: 1) Aligned BAM or CRAM files (whole genome sequencing, >30x coverage recommended), 2) Reference genome (matching your alignment), 3) Sample metadata (sex, batch information)",
@@ -162,6 +164,37 @@ class SVKnowledgeBase:
                 "Check inheritance patterns in families",
                 "Visualize calls in IGV or similar tools"
             ]
+        }
+        
+        # sv-agent capabilities
+        self.capabilities = {
+            "what_i_can_do": [
+                "Execute CWL workflows for structural variant analysis",
+                "Convert GATK-SV WDL workflows to CWL format",
+                "Run GATK-SV pipeline on genomic data (BAM/CRAM files)",
+                "Process samples through all GATK-SV modules",
+                "Generate VCF files with SV calls",
+                "Analyze workflow structure and dependencies",
+                "Provide expert guidance on SV analysis"
+            ],
+            "what_i_cannot_do": [
+                "Execute WDL workflows directly (must convert to CWL first)",
+                "Access external databases or APIs",
+                "Run workflows without proper input files",
+                "Modify the GATK-SV algorithms"
+            ],
+            "execution_details": {
+                "run_command": "sv-agent run workflow.cwl inputs.yaml",
+                "input_files": "BAM/CRAM files, reference genome, sample metadata",
+                "output_files": "VCF files with structural variant calls",
+                "engine": "Integrated CWL execution engine"
+            },
+            "conversion_details": {
+                "input": "WDL workflow files from GATK-SV",
+                "output": "CWL v1.2 compatible workflow files",
+                "command": "sv-agent convert -o output_dir -m ModuleName",
+                "purpose": "Convert WDL to CWL for execution"
+            }
         }
     
     def get_module_info(self, module_name: str) -> Dict[str, Any]:

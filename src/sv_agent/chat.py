@@ -1,18 +1,26 @@
 """Chat interface for SV-Agent - Interactive domain-specific agent."""
 
 import json
+import asyncio
 from typing import Dict, Any, List, Optional, Callable
 from pathlib import Path
 import re
+import logging
 
 from .agent import SVAgent
 from .knowledge import SVKnowledgeBase
+from .llm import detect_available_provider, OllamaProvider, RuleBasedProvider
+from .llm.utils import ConversationMemory, format_prompt_for_sv_domain
+
+
+logger = logging.getLogger(__name__)
 
 
 class SVAgentChat:
     """Interactive chat interface for SV-Agent."""
     
-    def __init__(self, agent: Optional[SVAgent] = None):
+    def __init__(self, agent: Optional[SVAgent] = None, llm_provider=None,
+                 llm_config: Optional[Dict[str, Any]] = None):
         """Initialize chat interface."""
         self.agent = agent or SVAgent()
         self.knowledge = SVKnowledgeBase()
@@ -21,6 +29,19 @@ class SVAgentChat:
             "workflow_state": None,
             "last_results": None
         }
+        
+        # Initialize LLM provider
+        if llm_provider == "none":
+            self.llm = RuleBasedProvider(self.knowledge)
+        else:
+            self.llm = llm_provider or self._initialize_llm(llm_config)
+        
+        # Conversation memory for multi-turn interactions
+        self.memory = ConversationMemory()
+        
+        # Check if we're using a capable LLM
+        self.has_llm = not isinstance(self.llm, RuleBasedProvider)
+        logger.info(f"Initialized chat with LLM provider: {type(self.llm).__name__}")
         
         # Define intent handlers
         self.handlers = {
@@ -34,9 +55,27 @@ class SVAgentChat:
             "troubleshoot": self._handle_troubleshoot
         }
     
+    def _initialize_llm(self, config: Optional[Dict[str, Any]] = None) -> Any:
+        """Initialize LLM provider based on configuration."""
+        config = config or {}
+        
+        # Try to detect from config
+        if config.get("provider") == "ollama":
+            return OllamaProvider(
+                model=config.get("model", "llama2:13b"),
+                base_url=config.get("url", "http://localhost:11434")
+            )
+        
+        # Auto-detect
+        return detect_available_provider(config.get("provider"))
+    
     def chat(self, message: str) -> str:
         """Process a chat message and return response."""
-        # Parse intent from message
+        # If we have a capable LLM, use it for natural conversation
+        if self.has_llm:
+            return self._handle_llm_chat(message)
+        
+        # Otherwise fall back to rule-based routing
         intent, params = self._parse_intent(message)
         
         # Route to appropriate handler
@@ -45,6 +84,65 @@ class SVAgentChat:
         
         # Default to knowledge search
         return self._handle_knowledge_search(message)
+    
+    def _handle_llm_chat(self, message: str) -> str:
+        """Handle chat using LLM for natural conversation."""
+        try:
+            # Get conversation context
+            context = self.memory.get_context()
+            
+            # Get relevant knowledge
+            knowledge_context = self._get_relevant_knowledge(message)
+            
+            # Format prompt with SV domain context
+            prompt = format_prompt_for_sv_domain(
+                message,
+                context=f"{context}\n\nRelevant Knowledge:\n{knowledge_context}"
+            )
+            
+            # Generate response (handle async properly)
+            if asyncio.iscoroutinefunction(self.llm.generate):
+                response = asyncio.run(self.llm.generate(prompt))
+            else:
+                response = self.llm.generate(prompt)
+            
+            # Store in memory
+            self.memory.add_turn(message, response)
+            
+            return response
+            
+        except Exception as e:
+            logger.error(f"LLM generation failed: {e}")
+            # Fall back to rule-based response
+            return self._handle_knowledge_search(message)
+    
+    def _get_relevant_knowledge(self, query: str) -> str:
+        """Get relevant knowledge context for the query."""
+        query_lower = query.lower()
+        context_parts = []
+        
+        # Always include capabilities for tool-related questions
+        if any(word in query_lower for word in ["can", "run", "execute", "tool", "what", "do", "capability"]):
+            context_parts.append("SV-AGENT CAPABILITIES:")
+            context_parts.append("Main function: Execute CWL workflows to run GATK-SV analysis")
+            context_parts.append("Can do: " + ", ".join(self.knowledge.capabilities["what_i_can_do"][:3]))
+            context_parts.append("Cannot do: " + ", ".join(self.knowledge.capabilities["what_i_cannot_do"][:2]))
+            context_parts.append(f"Run command: {self.knowledge.capabilities['execution_details']['run_command']}")
+            context_parts.append(f"Convert command: {self.knowledge.capabilities['conversion_details']['command']}")
+            context_parts.append("")
+        
+        # Search for other relevant knowledge
+        results = self.knowledge.search_knowledge(query)
+        
+        for result in results[:3]:
+            if result["type"] == "Module":
+                context_parts.append(
+                    f"{result['id']}: {result['info']['name']} - {result['info']['purpose']}"
+                )
+            elif result["type"] == "FAQ":
+                context_parts.append(f"Q: {result['question']} A: {result['answer']}")
+        
+        return "\n".join(context_parts)
     
     def _parse_intent(self, message: str) -> tuple[str, Dict[str, Any]]:
         """Parse user intent from message."""
@@ -236,46 +334,49 @@ samtools flagstat input.bam
     
     def _handle_run(self, params: Dict[str, Any]) -> str:
         """Handle run/execution requests."""
-        return """To run GATK-SV analysis on your samples:
+        return """sv-agent can execute CWL workflows to run GATK-SV analysis:
 
-**1. Prepare your configuration file** (e.g., `cohort.json`):
-```json
-{
-  "samples": [
-    {
-      "id": "SAMPLE001", 
-      "bam": "/data/sample001.bam",
-      "bai": "/data/sample001.bam.bai"
-    }
-  ],
-  "reference": "/ref/hg38.fa",
-  "output_dir": "/output/sv_calls",
-  "batch_metadata": {
-    "batch_id": "BATCH001",
-    "sequencing_platform": "Illumina"
-  }
-}
-```
-
-**2. Run with sv-agent:**
+**1. First, convert WDL to CWL:**
 ```bash
-sv-agent process cohort.json --output results/
+sv-agent convert -o cwl_output -m Module00a
 ```
 
-**3. Or use Python:**
-```python
-from sv_agent import SVAgent
-
-agent = SVAgent()
-results = agent.process_batch(batch_config)
+**2. Prepare input configuration** (`inputs.yaml`):
+```yaml
+bam_file:
+  class: File
+  path: /path/to/sample.bam
+  secondaryFiles:
+    - class: File
+      path: /path/to/sample.bam.bai
+reference:
+  class: File
+  path: /path/to/reference.fa
+  secondaryFiles:
+    - class: File
+      path: /path/to/reference.fa.fai
+sample_id: "SAMPLE001"
 ```
 
-**Note:** Full GATK-SV execution requires:
-- WDL runner (Cromwell/Terra)
-- Significant compute resources
-- 12-24 hours for 100 samples
+**3. Run the CWL workflow:**
+```bash
+sv-agent run cwl_output/GatherSampleEvidence.cwl inputs.yaml
+```
 
-Would you like help with configuration or resource planning?"""
+**Key Points:**
+- sv-agent has an integrated CWL execution engine
+- Processes BAM/CRAM files through GATK-SV pipeline
+- Generates VCF files with structural variant calls
+- Handles all GATK-SV modules (Module00a through Module06)
+
+**Full pipeline execution:**
+```bash
+# Convert all modules
+sv-agent convert -o cwl_output
+
+# Run complete pipeline
+sv-agent run cwl_output/GATKSVPipelineBatch.cwl batch_inputs.yaml
+```"""
     
     def _handle_status(self, params: Dict[str, Any]) -> str:
         """Handle status requests."""

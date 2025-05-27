@@ -31,6 +31,7 @@ Examples:
   sv-agent chat
   sv-agent ask "What coverage do I need for SV detection?"
   sv-agent analyze GATKSVPipelineBatch
+  sv-agent chat --llm-provider ollama --ollama-model codellama:13b
         """
     )
     
@@ -38,6 +39,24 @@ Examples:
         '-v', '--verbose',
         action='store_true',
         help='Enable verbose logging'
+    )
+    
+    # LLM configuration options
+    parser.add_argument(
+        '--llm-provider',
+        choices=['ollama', 'openai', 'anthropic', 'auto', 'none'],
+        default='auto',
+        help='LLM provider to use (default: auto-detect)'
+    )
+    parser.add_argument(
+        '--ollama-model',
+        default='llama2:13b',
+        help='Ollama model to use (default: llama2:13b)'
+    )
+    parser.add_argument(
+        '--ollama-url',
+        default='http://localhost:11434',
+        help='Ollama API URL (default: http://localhost:11434)'
     )
     
     # Create subcommands
@@ -201,12 +220,30 @@ Examples:
                     print(f"  {module_id:<12} - {info['name']}")
         
         elif args.command == "chat":
+            # Initialize LLM provider based on args
+            llm_config = {
+                "provider": args.llm_provider,
+                "model": args.ollama_model,
+                "url": args.ollama_url
+            }
+            
+            # Handle special case for no LLM
+            llm_provider = None
+            if args.llm_provider == "none":
+                llm_provider = "none"
+            
             # Interactive chat
-            chat = SVAgentChat(agent)
+            chat = SVAgentChat(agent, llm_provider=llm_provider, llm_config=llm_config)
             
             if not args.no_banner:
                 print("🧬 SV-Agent Interactive Chat")
                 print("=" * 50)
+                
+                if chat.has_llm:
+                    print(f"Using LLM: {type(chat.llm).__name__}")
+                else:
+                    print("Running in rule-based mode (no LLM)")
+                
                 print("Ask me about GATK-SV, structural variants, or workflow conversion.")
                 print("Type 'help' for guidance or 'exit' to quit.\n")
             
@@ -228,8 +265,20 @@ Examples:
                     print(f"\nSV-Agent: Sorry, I encountered an error: {e}\n")
         
         elif args.command == "ask":
+            # Initialize LLM provider based on args
+            llm_config = {
+                "provider": args.llm_provider,
+                "model": args.ollama_model,
+                "url": args.ollama_url
+            }
+            
+            # Handle special case for no LLM
+            llm_provider = None
+            if args.llm_provider == "none":
+                llm_provider = "none"
+            
             # Single question
-            chat = SVAgentChat(agent)
+            chat = SVAgentChat(agent, llm_provider=llm_provider, llm_config=llm_config)
             question = " ".join(args.question)
             response = chat.chat(question)
             print(response)
