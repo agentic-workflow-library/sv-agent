@@ -4,7 +4,7 @@
 echo "Setting up sv-agent..."
 
 # Check if submodules are initialized
-if [ ! -f "awlkit/setup.py" ]; then
+if [ ! -f "submodules/awlkit/setup.py" ]; then
     echo "Initializing submodules..."
     git submodule update --init --recursive
 fi
@@ -12,7 +12,7 @@ fi
 # Install dependencies
 echo "Installing dependencies..."
 pip install -e .
-pip install -e awlkit/
+pip install -e submodules/awlkit/
 
 # Optional: Install Ollama support
 echo ""

@@ -15,7 +15,7 @@ class SVAgent(Agent):
         """Initialize SVAgent with optional configuration."""
         super().__init__(config)
         self.name = "SVAgent"
-        self.gatksv_path = Path(__file__).parent.parent.parent / "gatk-sv"
+        self.gatksv_path = Path(__file__).parent.parent.parent / "submodules" / "gatk-sv"
         self.converter = WDLToCWLConverter()
         self.parser = WDLParser()
         self.knowledge = SVKnowledgeBase()

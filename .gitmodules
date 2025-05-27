@@ -1,9 +1,9 @@
 [submodule "awlkit"]
-	path = awlkit
+	path = submodules/awlkit
 	url = https://github.com/agentic-workflow-library/awlkit.git
 [submodule "gatk-sv"]
-	path = gatk-sv
+	path = submodules/gatk-sv
 	url = https://github.com/broadinstitute/gatk-sv.git
 [submodule "awl-handbook"]
-	path = awl-handbook
+	path = submodules/awl-handbook
 	url = https://github.com/agentic-workflow-library/awl-handbook.git
