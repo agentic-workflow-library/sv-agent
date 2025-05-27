@@ -1,0 +1,27 @@
+type: record
+name: RuntimeAttr
+fields:
+  mem_gb:
+    type:
+      - "null"
+      - float
+  cpu_cores:
+    type:
+      - "null" 
+      - int
+  disk_gb:
+    type:
+      - "null"
+      - int
+  boot_disk_gb:
+    type:
+      - "null"
+      - int
+  preemptible_tries:
+    type:
+      - "null"
+      - int
+  max_retries:
+    type:
+      - "null"
+      - int

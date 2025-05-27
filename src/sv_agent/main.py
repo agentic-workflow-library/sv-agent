@@ -26,8 +26,8 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  sv-agent convert -i gatk-sv/wdl -o outputs/cwl
-  sv-agent convert -i gatk-sv/wdl -o outputs/cwl -m GatherSampleEvidence
+  sv-agent convert -i gatk-sv/wdl -o src/sv_agent/cwl
+  sv-agent convert -i gatk-sv/wdl -o src/sv_agent/cwl -m GatherSampleEvidence
   sv-agent chat
   sv-agent ask "What coverage do I need for SV detection?"
   sv-agent analyze GATKSVPipelineBatch
@@ -57,8 +57,8 @@ Examples:
     convert_parser.add_argument(
         '-o', '--output',
         type=Path,
-        default=Path("outputs/cwl"),
-        help="Output directory for CWL files (default: outputs/cwl)"
+        default=Path("src/sv_agent/cwl"),
+        help="Output directory for CWL files (default: src/sv_agent/cwl)"
     )
     convert_parser.add_argument(
         '-m', '--modules',

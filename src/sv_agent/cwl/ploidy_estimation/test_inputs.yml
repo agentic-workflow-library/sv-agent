@@ -1,0 +1,30 @@
+# Test inputs for Ploidy Estimation workflow
+# This file demonstrates the expected input structure
+
+bincov_matrix:
+  class: File
+  path: ../../../examples/test_data/sample.bincov.bed.gz  # Update with actual path
+
+batch: "test_batch_001"
+
+# Docker images from GATK-SV
+sv_base_mini_docker: "us.gcr.io/broad-gatk/gatk-sv/sv-base-mini:latest"
+sv_pipeline_qc_docker: "us.gcr.io/broad-gatk/gatk-sv/sv-pipeline-qc:latest"
+
+# Optional runtime attribute overrides
+# Uncomment to customize resource allocation
+# runtime_attr_build:
+#   mem_gb: 8.0
+#   cpu_cores: 2
+#   disk_gb: 100
+#   boot_disk_gb: 10
+#   preemptible_tries: 3
+#   max_retries: 2
+
+# runtime_attr_score:
+#   mem_gb: 4.0
+#   cpu_cores: 1
+#   disk_gb: 20
+#   boot_disk_gb: 10
+#   preemptible_tries: 3
+#   max_retries: 2

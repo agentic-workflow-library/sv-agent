@@ -48,8 +48,8 @@ flake8 src/
 mypy src/
 
 # CLI usage
-sv-agent convert -o outputs/cwl  # Convert all workflows
-sv-agent convert -o outputs/cwl -m GatherSampleEvidence Module00a  # Specific modules
+sv-agent convert -o src/sv_agent/cwl  # Convert all workflows
+sv-agent convert -o src/sv_agent/cwl -m GatherSampleEvidence Module00a  # Specific modules
 sv-agent analyze GATKSVPipelineBatch  # Analyze workflow structure
 sv-agent chat  # Interactive chat
 sv-agent ask "What coverage do I need for SV detection?"  # Single question
@@ -75,7 +75,7 @@ Usage:
 ```python
 from sv_agent import SVAgent
 agent = SVAgent()
-results = agent.convert_gatksv_to_cwl(output_dir="outputs/cwl", modules=["Module00a"])
+results = agent.convert_gatksv_to_cwl(output_dir="src/sv_agent/cwl", modules=["Module00a"])
 ```
 
 ## Configuration Format

@@ -20,6 +20,6 @@ mkdir -p outputs
 echo "Setup complete!"
 echo ""
 echo "You can now use sv-agent:"
-echo "  sv-agent convert -o outputs/cwl"
+echo "  sv-agent convert -o src/sv_agent/cwl"
 echo "  sv-agent chat"
 echo "  sv-agent list"

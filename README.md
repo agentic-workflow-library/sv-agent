@@ -27,13 +27,13 @@ pip install -e awlkit/
 
 ```bash
 # Convert all GATK-SV workflows
-sv-agent convert -o outputs/cwl
+sv-agent convert -o src/sv_agent/cwl
 
 # Convert specific modules
-sv-agent convert -o outputs/cwl -m GatherSampleEvidence Module00a
+sv-agent convert -o src/sv_agent/cwl -m GatherSampleEvidence Module00a
 
 # Convert with custom input directory
-sv-agent convert -i path/to/wdl -o outputs/cwl
+sv-agent convert -i path/to/wdl -o src/sv_agent/cwl
 ```
 
 ### Interactive Expert Guidance
@@ -63,7 +63,7 @@ sv-agent analyze GATKSVPipelineBatch -f json
 
 ```bash
 # Convert Module00a (Sample QC) to CWL
-sv-agent convert -o outputs/cwl -m Module00a
+sv-agent convert -o src/sv_agent/cwl -m Module00a
 
 # Get help on troubleshooting low variant calls
 sv-agent ask "How do I troubleshoot low SV call counts?"
@@ -81,7 +81,7 @@ agent = SVAgent()
 
 # Convert workflows
 results = agent.convert_gatksv_to_cwl(
-    output_dir="outputs/cwl",
+    output_dir="src/sv_agent/cwl",
     modules=["Module00a", "Module00b"]
 )
 
@@ -94,7 +94,8 @@ analysis = agent.analyze_gatksv_workflow("GATKSVPipelineBatch")
 ```
 sv-agent/
 ├── src/sv_agent/       # Main Python package
-├── outputs/            # Generated CWL files (git-ignored)
+│   └── cwl/            # Generated CWL files
+├── docs/               # Documentation
 ├── examples/           # Example configurations
 ├── tests/              # Test suite
 ├── awlkit/             # AWLKit framework (submodule)
