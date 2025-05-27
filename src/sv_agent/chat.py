@@ -106,9 +106,166 @@ class SVAgentChat(ChatInterface):
         # Register SV-specific handlers
         self._register_sv_handlers()
         
+        # Natural language executor
+        from .nl_executor import NaturalLanguageExecutor
+        self.nl_executor = NaturalLanguageExecutor(self.agent)
+        
+        # Seven Bridges executor
+        from .sb_executor import SevenBridgesExecutor
+        self.sb_executor = SevenBridgesExecutor(self.agent)
+        
+        # Multi-step execution state
+        self.execution_state = {
+            "mode": None,  # "local", "sb" 
+            "plan": None,
+            "step": 0,
+            "awaiting_response": None
+        }
+        
     def chat(self, query: str) -> str:
         """Compatibility method that forwards to process_query."""
         return self.process_query(query)
+    
+    def process_query(self, query: str) -> str:
+        """Override to handle multi-step execution dialogs."""
+        # Check if we're in the middle of a multi-step execution
+        if self.execution_state["awaiting_response"]:
+            return self._handle_execution_response(query)
+        
+        # Check for Seven Bridges execution requests
+        query_lower = query.lower()
+        sb_keywords = ["seven bridges", "sb", "cgc", "cavatica", "platform", "cloud"]
+        execution_keywords = ["run", "execute", "process"]
+        
+        if (any(sb in query_lower for sb in sb_keywords) and 
+            any(exec in query_lower for exec in execution_keywords)):
+            return self._initiate_sb_execution(query)
+        
+        # Otherwise, use the parent implementation
+        return super().process_query(query)
+    
+    def _initiate_sb_execution(self, query: str) -> str:
+        """Initiate Seven Bridges execution dialog."""
+        result = self.sb_executor.initiate_execution_dialog(query)
+        
+        if result["status"] == "needs_info":
+            # Set up multi-step dialog state
+            self.execution_state = {
+                "mode": "sb",
+                "plan": result["plan"],
+                "step": 0,
+                "awaiting_response": result["questions"][0]["field"]
+            }
+            
+            # Format the first question
+            question = result["questions"][0]
+            response = f"**Seven Bridges Execution Setup**\n\n{result['message']}\n\n"
+            response += f"**{question['question']}**\n\n"
+            
+            if question["type"] == "choice":
+                for i, option in enumerate(question["options"], 1):
+                    response += f"{i}. {option}\n"
+                response += "\nPlease respond with a number or the platform name."
+            else:
+                response += "Please provide your answer."
+            
+            return response
+            
+        elif result["status"] == "ready":
+            return self._show_sb_execution_plan(result["plan"])
+        
+        else:
+            return "Sorry, I couldn't parse your Seven Bridges execution request."
+    
+    def _handle_execution_response(self, response: str) -> str:
+        """Handle user response in multi-step execution dialog."""
+        field = self.execution_state["awaiting_response"]
+        plan = self.execution_state["plan"]
+        
+        # Update plan with user response
+        updated_plan = self.sb_executor.update_plan_with_response(plan, field, response)
+        self.execution_state["plan"] = updated_plan
+        self.execution_state["step"] += 1
+        
+        # Check if we need more information
+        missing_info = self.sb_executor._check_required_info(updated_plan)
+        
+        if missing_info:
+            # Ask the next question
+            questions = self.sb_executor._generate_questions(missing_info)
+            next_question = questions[0]
+            
+            self.execution_state["awaiting_response"] = next_question["field"]
+            
+            response_text = f"**Step {self.execution_state['step'] + 1}**: {next_question['question']}\n\n"
+            
+            if next_question["type"] == "choice":
+                for i, option in enumerate(next_question["options"], 1):
+                    response_text += f"{i}. {option}\n"
+                response_text += "\nPlease respond with a number or keyword."
+            else:
+                response_text += "Please provide your answer."
+            
+            return response_text
+        else:
+            # All information collected, show execution plan
+            self.execution_state["awaiting_response"] = None
+            return self._show_sb_execution_plan(updated_plan)
+    
+    def _show_sb_execution_plan(self, plan: Dict[str, Any]) -> str:
+        """Show complete Seven Bridges execution plan."""
+        execution_plan = self.sb_executor.generate_execution_plan(plan)
+        commands = self.sb_executor.generate_sb_commands(plan)
+        
+        response = "**🚀 Seven Bridges Execution Plan**\n\n"
+        
+        # Platform info
+        response += f"**Platform:** {execution_plan['platform']['name']}\n"
+        response += f"**Project:** {execution_plan['project']}\n"
+        response += f"**Module:** {execution_plan['workflow']['module']}\n\n"
+        
+        # Files
+        response += "**Input Files:**\n"
+        for file in execution_plan['inputs']['files']:
+            response += f"- {file}\n"
+        response += "\n"
+        
+        # Cost estimate
+        costs = execution_plan['costs']
+        response += f"**Cost Estimate:**\n"
+        response += f"- Instance: {execution_plan['inputs']['instance_type']}\n"
+        response += f"- Estimated time: {costs['estimated_hours']} hours\n"
+        response += f"- Estimated cost: ${costs['estimated_cost_usd']}\n"
+        response += f"- Note: {costs['note']}\n\n"
+        
+        # Steps
+        response += "**Execution Steps:**\n"
+        for step in execution_plan['steps']:
+            response += f"{step}\n"
+        response += "\n"
+        
+        # Commands
+        response += "**Seven Bridges CLI Commands:**\n```bash\n"
+        response += "\n".join(commands)
+        response += "\n```\n\n"
+        
+        response += "**Next Steps:**\n"
+        response += "1. Ensure you have Seven Bridges CLI installed: `pip install sevenbridges-python`\n"
+        response += "2. Set up authentication token\n"
+        response += "3. Run the commands above\n"
+        response += "4. Or say 'execute this plan' to have me guide you through it\n\n"
+        
+        response += "Would you like me to proceed with execution or modify anything?"
+        
+        # Reset execution state
+        self.execution_state = {
+            "mode": None,
+            "plan": None, 
+            "step": 0,
+            "awaiting_response": None
+        }
+        
+        return response
     
     def _register_sv_handlers(self):
         """Register SV-specific intent handlers."""
@@ -367,49 +524,98 @@ samtools flagstat input.bam
     
     def _handle_run(self, query: str) -> str:
         """Handle SV pipeline run requests."""
-        return """sv-agent can execute CWL workflows to run GATK-SV analysis:
+        # Check if this is a natural language execution request
+        query_lower = query.lower()
+        
+        # Keywords that indicate execution intent
+        execution_keywords = ["run", "execute", "process", "analyze", "perform"]
+        has_files = any(ext in query for ext in [".bam", ".cram", ".vcf", ".bed"])
+        has_module = any(word in query_lower for word in ["qc", "evidence", "module", "clustering", "genotyping"])
+        
+        if any(keyword in query_lower for keyword in execution_keywords) and (has_files or has_module):
+            # This looks like an execution request
+            # Check if it's a dry run request
+            dry_run = "dry run" in query_lower or "show me" in query_lower or "would" in query_lower
+            
+            try:
+                result = self.nl_executor.execute_from_prompt(query, dry_run=dry_run)
+                
+                if result["status"] == "dry_run":
+                    plan = result["plan"]
+                    response = f"**Execution Plan for: {plan['module']}**\n\n"
+                    
+                    if plan["module_info"]:
+                        response += f"Module: {plan['module_info']['name']}\n"
+                        response += f"Purpose: {plan['module_info']['purpose']}\n\n"
+                    
+                    response += "**Detected Inputs:**\n"
+                    for file in plan["inputs"]["files"]:
+                        response += f"- {file}\n"
+                    
+                    if plan["inputs"]["parameters"]:
+                        response += "\n**Parameters:**\n"
+                        for key, value in plan["inputs"]["parameters"].items():
+                            response += f"- {key}: {value}\n"
+                    
+                    response += "\n**Commands to execute:**\n```bash\n"
+                    response += "\n".join(plan["commands"])
+                    response += "\n```\n\n"
+                    response += "To execute this plan, confirm by saying 'yes, run it' or run the commands above."
+                    
+                    return response
+                    
+                elif result["status"] == "success":
+                    return f"✅ **Execution Complete**\n\nModule: {result['module']}\n\nOutputs:\n{json.dumps(result['outputs'], indent=2)}"
+                    
+                else:
+                    return f"❌ **Execution Failed**\n\n{result['message']}"
+                    
+            except Exception as e:
+                logger.error(f"Natural language execution failed: {e}")
+                # Fall back to help text
+        
+        # Default help text for general run queries
+        return """sv-agent can execute CWL workflows to run GATK-SV analysis.
 
-**1. First, convert WDL to CWL:**
+**🖥️ Local Execution:**
+Try commands like:
+- "Run QC on sample1.bam"
+- "Execute Module00a with these files: file1.bam, file2.bam"
+- "Process evidence QC on my batch"
+- "Show me how to run genotyping on these samples"
+
+**☁️ Seven Bridges Platform Execution:**
+Try commands like:
+- "Run QC on Seven Bridges with sample1.bam"
+- "Execute Module00a on CGC platform"
+- "Process this on CAVATICA: sbg://project/sample.bam"
+- "Run genotyping on Seven Bridges platform"
+
+**Manual Execution:**
 ```bash
+# Local execution
 sv-agent convert -o cwl_output -m Module00a
+sv-agent run cwl_output/Module00a.cwl inputs.yaml
+
+# Seven Bridges execution
+sb apps install-workflow Module00a.cwl project/workflow
+sb tasks create --app project/workflow --inputs inputs.json
 ```
 
-**2. Prepare input configuration** (`inputs.yaml`):
-```yaml
-bam_file:
-  class: File
-  path: /path/to/sample.bam
-  secondaryFiles:
-    - class: File
-      path: /path/to/sample.bam.bai
-reference:
-  class: File
-  path: /path/to/reference.fa
-  secondaryFiles:
-    - class: File
-      path: /path/to/reference.fa.fai
-sample_id: "SAMPLE001"
-```
+**Supported Platforms:**
+- 🏥 Cancer Genomics Cloud (CGC) - Free for cancer research
+- 👶 CAVATICA - Free for pediatric research  
+- ☁️ Seven Bridges AWS/GCP/Azure - Commercial platforms
 
-**3. Run the CWL workflow:**
-```bash
-sv-agent run cwl_output/GatherSampleEvidence.cwl inputs.yaml
-```
+**Supported Modules:**
+- Module00a: Sample QC
+- Module00b: Evidence Collection  
+- Module00c: Batch QC
+- Module01: Clustering
+- Module03: Filtering
+- Module04: Genotyping
 
-**Key Points:**
-- sv-agent has an integrated CWL execution engine
-- Processes BAM/CRAM files through GATK-SV pipeline
-- Generates VCF files with structural variant calls
-- Handles all GATK-SV modules (Module00a through Module06)
-
-**Full pipeline execution:**
-```bash
-# Convert all modules
-sv-agent convert -o cwl_output
-
-# Run complete pipeline
-sv-agent run cwl_output/GATKSVPipelineBatch.cwl batch_inputs.yaml
-```"""
+I can help you execute these modules locally or on Seven Bridges platforms - just describe what you want to do!"""
     
     def _handle_status(self, query: str) -> str:
         """Handle SV pipeline status requests."""
