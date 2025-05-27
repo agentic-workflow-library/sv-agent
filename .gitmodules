@@ -4,3 +4,6 @@
 [submodule "gatk-sv"]
 	path = gatk-sv
 	url = https://github.com/broadinstitute/gatk-sv.git
+[submodule "awl-handbook"]
+	path = awl-handbook
+	url = https://github.com/agentic-workflow-library/awl-handbook.git
