@@ -1,37 +1,42 @@
-# SV-Agent
+# sv-agent
 
-An AWLKit-based agent for automating the GATK-SV structural variant discovery pipeline. SV-Agent provides a Python interface to GATK-SV workflows and includes tools for converting WDL workflows to CWL format.
+A Python command-line tool for converting GATK-SV WDL workflows to CWL format and providing expert guidance on structural variant analysis.
 
 ## Features
 
-- **Automated Pipeline Execution**: Run GATK-SV workflows with simple Python commands
-- **WDL to CWL Conversion**: Convert GATK-SV WDL workflows to CWL format using AWLKit
-- **Workflow Analysis**: Analyze workflow structure, dependencies, and complexity
-- **Batch Processing**: Process multiple samples through the SV pipeline
-- **Modular Architecture**: Work with individual GATK-SV modules or the complete pipeline
+- **WDL to CWL Conversion**: Convert GATK-SV workflows from WDL to CWL format
+- **Expert SV Guidance**: Interactive chat with domain expertise in structural variant analysis
+- **Workflow Analysis**: Analyze and understand GATK-SV workflow structure
+- **Command-line Interface**: Simple, focused CLI for all operations
 
 ## Installation
 
 ```bash
 # Clone with submodules
-git clone --recursive https://github.com/YOUR_USERNAME/sv-agent.git
+git clone --recursive https://github.com/agentic-workflow-library/sv-agent.git
 cd sv-agent
 
-# Install sv-agent
+# Install dependencies
 pip install -e .
-
-# Install AWLKit
 pip install -e awlkit/
-
-# Install development dependencies
-pip install -e ".[dev]"
 ```
 
-## Quick Start
+## Usage
 
-### Interactive Chat
+### Convert WDL to CWL
 
-SV-Agent is a domain-specific agent that can answer questions about structural variant analysis:
+```bash
+# Convert all GATK-SV workflows
+sv-agent convert -o outputs/cwl
+
+# Convert specific modules
+sv-agent convert -o outputs/cwl -m GatherSampleEvidence Module00a
+
+# Convert with custom input directory
+sv-agent convert -i path/to/wdl -o outputs/cwl
+```
+
+### Interactive Expert Guidance
 
 ```bash
 # Start interactive chat
@@ -39,54 +44,48 @@ sv-agent chat
 
 # Ask a single question
 sv-agent ask "What coverage do I need for SV detection?"
+
+# List available modules
+sv-agent list --details
 ```
 
-### Using in Python/Jupyter
-
-```python
-from sv_agent import create_agent
-
-# Create the agent
-agent = create_agent()
-
-# Ask questions
-agent.ask("What are structural variants?")
-agent.ask("Explain Module00a")
-
-# Show GATK-SV modules
-agent.show_modules()
-
-# Get best practices
-agent.best_practices("sample selection")
-```
-
-### Command Line Operations
+### Analyze Workflows
 
 ```bash
-# Process a batch of samples
-sv-agent process examples/batch1.json --output results/
+# Analyze workflow structure
+sv-agent analyze GATKSVPipelineBatch
 
-# Convert WDL to CWL
-sv-agent convert --output cwl_output --modules Module00a Module00b
+# Output as JSON
+sv-agent analyze GATKSVPipelineBatch -f json
+```
 
-# Analyze workflow
+## Examples
+
+```bash
+# Convert Module00a (Sample QC) to CWL
+sv-agent convert -o outputs/cwl -m Module00a
+
+# Get help on troubleshooting low variant calls
+sv-agent ask "How do I troubleshoot low SV call counts?"
+
+# Analyze the main GATK-SV pipeline
 sv-agent analyze GATKSVPipelineBatch
 ```
 
-### Converting WDL to CWL
+## Python API
 
 ```python
 from sv_agent import SVAgent
 
 agent = SVAgent()
 
-# Convert specific GATK-SV modules
+# Convert workflows
 results = agent.convert_gatksv_to_cwl(
-    output_dir=Path("cwl_output"),
+    output_dir="outputs/cwl",
     modules=["Module00a", "Module00b"]
 )
 
-# Analyze workflow structure
+# Analyze workflow
 analysis = agent.analyze_gatksv_workflow("GATKSVPipelineBatch")
 ```
 
@@ -94,35 +93,18 @@ analysis = agent.analyze_gatksv_workflow("GATKSVPipelineBatch")
 
 ```
 sv-agent/
-├── awlkit/                  # AWLKit framework (submodule)
-│   └── src/awlkit/         # WDL/CWL conversion tools
-├── gatk-sv/                # GATK-SV pipeline (submodule)
-│   └── wdl/                # WDL workflow definitions
-├── src/sv_agent/           # Main agent implementation
-├── tests/                  # Test suite
-├── examples/               # Example configurations
-└── docs/                   # Additional documentation
+├── src/sv_agent/       # Main Python package
+├── outputs/            # Generated CWL files (git-ignored)
+├── examples/           # Example configurations
+├── tests/              # Test suite
+├── awlkit/             # AWLKit framework (submodule)
+└── gatk-sv/            # GATK-SV pipeline (submodule)
 ```
 
 ## Documentation
 
-- [AWL Handbook](awl-handbook/) - Comprehensive documentation for AWLKit and AWL ecosystem
-- [AWLKit Development](AWLKIT_DEVELOPMENT.md) - Guide for extending AWLKit  
-- [GATK-SV Documentation](https://github.com/broadinstitute/gatk-sv) - Official GATK-SV docs
-
-## Development
-
-```bash
-# Run tests
-pytest
-
-# Format code
-black src/
-
-# Type checking
-mypy src/
-```
+For comprehensive documentation, see the [AWL Handbook](https://github.com/agentic-workflow-library/awl-handbook).
 
 ## License
 
-This project is licensed under the MIT License - see the LICENSE file for details.
+MIT License - see LICENSE file for details.

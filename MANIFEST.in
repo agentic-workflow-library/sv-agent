@@ -1,0 +1,8 @@
+include README.md
+include LICENSE
+include pyproject.toml
+recursive-include src *.py
+recursive-include src/sv_agent/prompts *.txt
+recursive-include src/sv_agent/templates *.cwl
+recursive-include examples *.json *.ipynb
+recursive-include tests *.py

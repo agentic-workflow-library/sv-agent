@@ -4,82 +4,104 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Repository Overview
 
-sv-agent is an AWLKit-based agent that wraps the GATK-SV structural variant discovery pipeline. It provides a Python interface to automate complex WDL-based workflows for detecting structural variants in genomic data.
+sv-agent is a domain-specific agent that provides:
+1. WDL to CWL conversion for GATK-SV workflows 
+2. Expert guidance on structural variant analysis
+3. Interactive CLI for workflow conversion and SV analysis questions
 
 ## Key Architecture
 
 ### Core Components
-- **SVAgent**: Main agent class in `src/sv_agent/agent.py` that inherits from AWLKit's Agent base class
-- **WorkflowEngine**: Manages WDL workflow execution (from AWLKit)
-- **CLI Interface**: Entry point in `src/sv_agent/main.py` using argparse
+- **SVAgent** (`src/sv_agent/agent.py`): Main agent class inheriting from AWLKit's Agent base
+- **SVAgentChat** (`src/sv_agent/chat.py`): Interactive chat interface for SV expertise
+- **SVKnowledgeBase** (`src/sv_agent/knowledge.py`): Domain knowledge about GATK-SV modules
+- **CLI** (`src/sv_agent/main.py`): Argparse-based CLI with subcommands: convert, analyze, chat, ask, list
 
-### Dependencies
-- **awlkit**: Core agentic workflow framework (git submodule)
-- **gatk-sv**: Broad Institute's SV discovery pipeline (git submodule) containing WDL workflows
+### Dependencies (Git Submodules)
+- **awlkit/**: Core agentic workflow framework providing WDL/CWL conversion capabilities
+- **gatk-sv/**: Broad Institute's structural variant discovery pipeline (90+ WDL files)
 
-### Pipeline Structure
-The GATK-SV pipeline consists of sequential modules:
-- Module00a: Sample QC
-- Module00b: Evidence Gathering (Manta, MELT, read depth, etc.)
-- Module00c: Batch QC
+### GATK-SV Pipeline Structure
+Sequential modules for SV discovery:
+- Module00a-c: Sample QC, Evidence Gathering (Manta, MELT, read depth), Batch QC
 - Module01-06: Clustering, Merging, Filtering, Genotyping, Batch Effects, Annotation
 
 ## Development Commands
 
 ```bash
-# Install for development
-pip install -e ".[dev]"
+# Initial setup (includes submodules)
+./setup.sh
+
+# Manual installation
+git submodule update --init --recursive
+pip install -e .
+pip install -e awlkit/
 
 # Run tests
 pytest
 pytest tests/test_agent.py::TestSVAgent::test_process_batch  # Single test
+pytest --cov=sv_agent  # With coverage
 
 # Code quality
 black src/
 flake8 src/
 mypy src/
 
-# Run the agent
-sv-agent examples/batch1.json --output results/
+# CLI usage
+sv-agent convert -o outputs/cwl  # Convert all workflows
+sv-agent convert -o outputs/cwl -m GatherSampleEvidence Module00a  # Specific modules
+sv-agent analyze GATKSVPipelineBatch  # Analyze workflow structure
+sv-agent chat  # Interactive chat
+sv-agent ask "What coverage do I need for SV detection?"  # Single question
+sv-agent list --details  # List available modules
 ```
 
-## Testing Approach
+## Testing Strategy
 
-Tests use pytest with mocking for external dependencies:
+- Tests use pytest with mocking for external dependencies
 - Mock WorkflowEngine to test agent logic without running actual WDL workflows
-- Test files in `tests/` with `test_` prefix
-- Coverage reports with `--cov=sv_agent`
+- Test files in `tests/` directory with `test_` prefix
+- Key test classes: TestSVAgent, TestSVAgentChat
 
-## Important Notes
+## AWLKit Integration
 
-1. **AWLKit Framework**: Located in the awlkit/ submodule, provides WDL to CWL conversion tools:
-   - `WDLParser`: Parses WDL files into intermediate representation
-   - `CWLWriter`: Generates CWL from intermediate representation
-   - `WDLToCWLConverter`: High-level conversion API
-   - Install with: `pip install -e awlkit/`
+AWLKit (in awlkit/ submodule) provides workflow conversion infrastructure:
+- **WDLParser**: Parses WDL files into intermediate representation
+- **CWLWriter**: Generates CWL v1.2 compliant output  
+- **WDLToCWLConverter**: High-level conversion API
+- **IR**: Language-agnostic workflow model
 
-2. **WDL to CWL Conversion**: SVAgent can convert GATK-SV workflows:
-   ```python
-   agent.convert_gatksv_to_cwl(output_dir, modules=["Module00a"])
-   ```
+Usage:
+```python
+from sv_agent import SVAgent
+agent = SVAgent()
+results = agent.convert_gatksv_to_cwl(output_dir="outputs/cwl", modules=["Module00a"])
+```
 
-3. **Configuration**: Batch processing requires JSON config with:
-   - samples: List of sample objects with id, bam, bai paths
-   - reference: Path to reference genome
-   - output_dir: Where to write results
+## Configuration Format
 
-4. **GATK-SV Submodule**: Contains 90+ WDL files and Docker configurations. Main entry point is `GATKSVPipelineBatch.wdl`
+Batch processing configuration (JSON):
+```json
+{
+  "samples": [{"id": "sample1", "bam": "path/to/bam", "bai": "path/to/bai"}],
+  "reference": "/path/to/reference.fa",
+  "output_dir": "/path/to/output"
+}
+```
 
-## AWLKit Development
+## Important Implementation Details
 
-AWLKit is built incrementally as needed. Current components:
-- IR (Intermediate Representation): Language-agnostic workflow model
-- Parsers: WDL parser implemented with regex-based approach
-- Writers: CWL writer generates v1.2 compliant output
-- Converters: WDLToCWLConverter handles file/directory conversion
-- Utils: Graph analysis and validation tools
+1. **Conversion Process**: 
+   - Searches for WDL files in gatk-sv/wdl/
+   - Converts to CWL using AWLKit's converter
+   - Outputs to specified directory preserving structure
 
-To extend AWLKit:
-1. Add new features to existing components as needed
-2. Test with GATK-SV WDL files for real-world validation
-3. Use `awlkit convert` CLI for testing conversions
+2. **Knowledge Base**:
+   - Embedded SV expertise in prompts/gatksv.txt
+   - Module descriptions in SVKnowledgeBase class
+   - Context-aware responses based on GATK-SV documentation
+
+3. **Error Handling**:
+   - Graceful failure for individual file conversions
+   - Detailed error reporting in conversion summaries
+   - Validation optional via --validate flag

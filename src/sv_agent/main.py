@@ -3,80 +3,121 @@
 import argparse
 import json
 import sys
+import logging
 from pathlib import Path
 
 from sv_agent import SVAgent
 from sv_agent.chat import SVAgentChat
 
 
+def setup_logging(verbose: bool):
+    """Set up logging configuration."""
+    level = logging.DEBUG if verbose else logging.INFO
+    logging.basicConfig(
+        level=level,
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    )
+
+
 def main():
     """Main CLI entry point."""
     parser = argparse.ArgumentParser(
-        description="SVAgent - Domain-specific agent for structural variant analysis"
+        description="sv-agent - Convert GATK-SV WDL workflows to CWL and provide SV analysis expertise",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  sv-agent convert -i gatk-sv/wdl -o outputs/cwl
+  sv-agent convert -i gatk-sv/wdl -o outputs/cwl -m GatherSampleEvidence
+  sv-agent chat
+  sv-agent ask "What coverage do I need for SV detection?"
+  sv-agent analyze GATKSVPipelineBatch
+        """
+    )
+    
+    parser.add_argument(
+        '-v', '--verbose',
+        action='store_true',
+        help='Enable verbose logging'
     )
     
     # Create subcommands
     subparsers = parser.add_subparsers(dest="command", help="Available commands")
     
-    # Process command (original functionality)
-    process_parser = subparsers.add_parser("process", help="Process a batch of samples")
-    process_parser.add_argument(
-        "batch_config",
-        type=Path,
-        help="Path to batch configuration JSON file"
-    )
-    process_parser.add_argument(
-        "--config",
-        type=Path,
-        help="Path to agent configuration file"
-    )
-    process_parser.add_argument(
-        "--output",
-        type=Path,
-        default=Path("results"),
-        help="Output directory for results (default: results)"
-    )
-    process_parser.add_argument(
-        "--verbose",
-        action="store_true",
-        help="Enable verbose output"
-    )
-    
-    # Convert command
-    convert_parser = subparsers.add_parser("convert", help="Convert WDL workflows to CWL")
-    convert_parser.add_argument(
-        "--output",
-        type=Path,
-        required=True,
-        help="Output directory for CWL files"
+    # Convert command - main functionality
+    convert_parser = subparsers.add_parser(
+        "convert",
+        help="Convert GATK-SV WDL workflows to CWL format"
     )
     convert_parser.add_argument(
-        "--modules",
+        '-i', '--input',
+        type=Path,
+        default=Path("gatk-sv/wdl"),
+        help="Input directory containing WDL files (default: gatk-sv/wdl)"
+    )
+    convert_parser.add_argument(
+        '-o', '--output',
+        type=Path,
+        default=Path("outputs/cwl"),
+        help="Output directory for CWL files (default: outputs/cwl)"
+    )
+    convert_parser.add_argument(
+        '-m', '--modules',
         nargs="+",
-        help="Specific modules to convert"
+        help="Specific modules to convert (e.g., GatherSampleEvidence)"
+    )
+    convert_parser.add_argument(
+        '--validate',
+        action='store_true',
+        help='Validate generated CWL files'
     )
     
     # Analyze command
-    analyze_parser = subparsers.add_parser("analyze", help="Analyze workflow structure")
+    analyze_parser = subparsers.add_parser(
+        "analyze",
+        help="Analyze GATK-SV workflow structure"
+    )
     analyze_parser.add_argument(
         "workflow",
-        help="Workflow name to analyze"
+        help="Workflow name to analyze (without .wdl extension)"
+    )
+    analyze_parser.add_argument(
+        '-f', '--format',
+        choices=['json', 'text'],
+        default='text',
+        help='Output format (default: text)'
     )
     
     # Chat command
-    chat_parser = subparsers.add_parser("chat", help="Interactive chat with SV-Agent")
+    chat_parser = subparsers.add_parser(
+        "chat",
+        help="Interactive chat for SV analysis guidance"
+    )
     chat_parser.add_argument(
-        "--no-banner",
+        '--no-banner',
         action="store_true",
         help="Skip welcome banner"
     )
     
-    # Ask command (single question)
-    ask_parser = subparsers.add_parser("ask", help="Ask a single question")
+    # Ask command
+    ask_parser = subparsers.add_parser(
+        "ask",
+        help="Ask a single question about SV analysis"
+    )
     ask_parser.add_argument(
         "question",
         nargs="+",
-        help="Question to ask"
+        help="Your question"
+    )
+    
+    # List command
+    list_parser = subparsers.add_parser(
+        "list",
+        help="List available GATK-SV modules"
+    )
+    list_parser.add_argument(
+        '--details',
+        action='store_true',
+        help='Show detailed information'
     )
     
     args = parser.parse_args()
@@ -86,55 +127,88 @@ def main():
         parser.print_help()
         sys.exit(0)
     
+    # Set up logging
+    setup_logging(args.verbose)
+    logger = logging.getLogger(__name__)
+    
     # Initialize agent
     agent = SVAgent()
     
     try:
-        if args.command == "process":
-            # Original batch processing functionality
-            with open(args.batch_config, "r") as f:
-                batch_config = json.load(f)
+        if args.command == "convert":
+            # Main conversion functionality
+            logger.info(f"Converting WDL files from {args.input} to {args.output}")
             
-            agent_config = {}
-            if args.config:
-                with open(args.config, "r") as f:
-                    agent_config = json.load(f)
-            
-            agent = SVAgent(config=agent_config)
-            results = agent.process_batch(batch_config)
-            
-            args.output.mkdir(parents=True, exist_ok=True)
-            with open(args.output / "results.json", "w") as f:
-                json.dump(results, f, indent=2)
-            
-            print(f"Processing completed. Results saved to {args.output}")
-        
-        elif args.command == "convert":
-            # Convert workflows
             results = agent.convert_gatksv_to_cwl(
                 output_dir=args.output,
                 modules=args.modules
             )
-            print(f"Converted {len(results['converted'])} workflows")
+            
+            print(f"\nConversion Summary:")
+            print(f"  ✓ Converted: {len(results['converted'])} files")
+            
+            if results['converted']:
+                print("\nSuccessfully converted:")
+                for f in results['converted'][:10]:  # Show first 10
+                    print(f"  - {f}")
+                if len(results['converted']) > 10:
+                    print(f"  ... and {len(results['converted']) - 10} more")
+            
             if results['failed']:
-                print(f"Failed: {len(results['failed'])} workflows")
-                for failure in results['failed'][:3]:
+                print(f"\n  ✗ Failed: {len(results['failed'])} files")
+                for failure in results['failed'][:5]:
                     print(f"  - {failure['file']}: {failure['error']}")
+            
+            print(f"\nOutput directory: {args.output}")
+            
+            if args.validate:
+                print("\nValidation: Run 'cwltool --validate <cwl_file>' to validate outputs")
         
         elif args.command == "analyze":
             # Analyze workflow
             analysis = agent.analyze_gatksv_workflow(args.workflow)
-            print(json.dumps(analysis, indent=2))
+            
+            if args.format == 'json':
+                print(json.dumps(analysis, indent=2))
+            else:
+                print(f"\nWorkflow Analysis: {analysis['name']}")
+                print(f"{'=' * 50}")
+                print(f"Inputs:       {analysis['inputs']}")
+                print(f"Outputs:      {analysis['outputs']}")
+                print(f"Tasks:        {analysis['tasks']}")
+                print(f"Calls:        {analysis['calls']}")
+                print(f"Imports:      {len(analysis['imports'])}")
+                
+                stats = analysis['statistics']
+                print(f"\nStatistics:")
+                print(f"  Max parallelism:  {stats['max_parallelism']}")
+                print(f"  Has cycles:       {stats['has_cycles']}")
+                print(f"  Total calls:      {stats['total_calls']}")
+        
+        elif args.command == "list":
+            # List available modules
+            from sv_agent.knowledge import SVKnowledgeBase
+            kb = SVKnowledgeBase()
+            
+            print("\nAvailable GATK-SV Modules:")
+            print("=" * 60)
+            
+            for module_id, info in kb.modules.items():
+                if args.details:
+                    print(f"\n{module_id}: {info['name']}")
+                    print(f"  Purpose: {info['purpose']}")
+                else:
+                    print(f"  {module_id:<12} - {info['name']}")
         
         elif args.command == "chat":
-            # Interactive chat mode
+            # Interactive chat
             chat = SVAgentChat(agent)
             
             if not args.no_banner:
-                print("🧬 Welcome to SV-Agent Chat!")
+                print("🧬 SV-Agent Interactive Chat")
                 print("=" * 50)
-                print("I'm your domain-specific agent for structural variant analysis.")
-                print("Type 'help' to see what I can do, or 'exit' to quit.\n")
+                print("Ask me about GATK-SV, structural variants, or workflow conversion.")
+                print("Type 'help' for guidance or 'exit' to quit.\n")
             
             while True:
                 try:
@@ -150,16 +224,18 @@ def main():
                     print("\nSV-Agent: Goodbye!")
                     break
                 except Exception as e:
+                    logger.error(f"Chat error: {e}")
                     print(f"\nSV-Agent: Sorry, I encountered an error: {e}\n")
         
         elif args.command == "ask":
-            # Single question mode
+            # Single question
             chat = SVAgentChat(agent)
             question = " ".join(args.question)
             response = chat.chat(question)
             print(response)
     
     except Exception as e:
+        logger.error(f"Error: {e}")
         print(f"Error: {e}", file=sys.stderr)
         sys.exit(1)
 
