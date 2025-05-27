@@ -181,18 +181,38 @@ pytest tests/test_llm_chat.py --run-integration
 pytest tests/test_llm_chat.py --run-integration --ollama-model gemma:7b
 ```
 
-## Performance Tips
+## Execution Modes
 
-For faster chat responses, you can use the Hugging Face Inference API instead of local models:
+sv-agent supports multiple execution modes for different use cases:
 
+### 🚀 API Mode (Fastest AI responses)
 ```bash
 # Get a free API token at https://huggingface.co/settings/tokens
 export HF_TOKEN="your_token_here"
 
-# Use API mode for instant responses
+# Use API mode for instant AI responses
 sv-agent --use-api chat
 sv-agent --use-api ask "What is a structural variant?"
 ```
+
+### 🖥️ Local Model Mode (Default)
+```bash
+# Uses local Gemma model (slower but private)
+sv-agent chat
+sv-agent ask "What coverage do I need?"
+```
+
+### ⚡ Knowledge Base Only Mode (Fastest startup)
+```bash
+# No LLM, uses built-in knowledge only
+sv-agent --kb-only chat
+sv-agent --kb-only ask "What is Module00a?"
+```
+
+**Comparison:**
+- **API Mode**: 1-3 seconds, requires internet, best AI responses
+- **Local Mode**: 10-30 seconds, works offline, good AI responses  
+- **KB-Only Mode**: <1 second, works offline, structured knowledge only
 
 See [API_SETUP.md](API_SETUP.md) for detailed API configuration options.
 

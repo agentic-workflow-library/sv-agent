@@ -29,7 +29,11 @@ class SVAgentChat(ChatInterface):
         # Determine which provider to use
         provider_type = config.get("provider", "local")
         
-        if provider_type == "api" or config.get("use_api", False):
+        if config.get("kb_only", False):
+            # Knowledge base only mode - no LLM
+            llm = None
+            logger.info("Using Knowledge Base Only mode (no LLM)")
+        elif provider_type == "api" or config.get("use_api", False):
             # Use HF Inference API for fast responses
             from awlkit.llm import get_hf_inference_provider
             HFInferenceProvider = get_hf_inference_provider()
@@ -281,6 +285,10 @@ class SVAgentChat(ChatInterface):
     
     def _handle_general_query(self, query: str) -> str:
         """Override base method to handle SV-specific queries."""
+        # If in kb-only mode, go straight to knowledge search
+        if self.llm is None:
+            return self._handle_knowledge_search(query)
+        
         # Get relevant SV knowledge
         knowledge_context = self._get_relevant_knowledge(query)
         
@@ -308,10 +316,10 @@ class SVAgentChat(ChatInterface):
                 logger.info("API requires authentication, falling back to knowledge base")
                 kb_response = self._handle_knowledge_search(query)
                 
-                return f"{kb_response}\n\n💡 **Tip:** For faster AI-powered responses, get a free API token:\n1. Visit https://huggingface.co/settings/tokens\n2. Create a token with 'read' permissions\n3. Run: export HF_TOKEN='your_token_here'\n4. Use: sv-agent --use-api ask 'your question'"
+                return f"{kb_response}\n\n💡 **Tip:** For faster AI-powered responses, get a free API token:\n1. Visit https://huggingface.co/settings/tokens\n2. Create a token with 'read' permissions\n3. Run: export HF_TOKEN='your_token_here'\n4. Use: sv-agent --use-api ask 'your question'\n\nOr use knowledge base only: sv-agent --kb-only chat"
             else:
                 # For other errors, report them clearly
-                return f"❌ **Error: Cannot generate response**\n\nThe LLM model failed to load or generate a response.\n\nError: {str(e)}\n\nPlease ensure you have a valid model installed. You can:\n1. Specify a model with --model flag\n2. Download a model from Hugging Face\n3. Check that your model path is correct"
+                return f"❌ **Error: Cannot generate response**\n\nThe LLM model failed to load or generate a response.\n\nError: {str(e)}\n\nPlease ensure you have a valid model installed. You can:\n1. Specify a model with --model flag\n2. Download a model from Hugging Face\n3. Check that your model path is correct\n4. Use knowledge base only: sv-agent --kb-only chat"
     
     def _get_relevant_knowledge(self, query: str) -> str:
         """Get relevant knowledge context for the query."""
@@ -370,7 +378,11 @@ class SVAgentChat(ChatInterface):
     
     def _handle_sv_help(self, query: str) -> str:
         """Handle SV-specific help requests."""
-        return """I'm SV-Agent, your domain-specific agent for structural variant analysis using GATK-SV.
+        mode_info = ""
+        if self.llm is None:
+            mode_info = "\n**🔧 Current Mode:** Knowledge Base Only (no LLM)\n- Fast startup and responses\n- Structured knowledge from built-in database\n- Module information and FAQs\n- For AI-powered responses, use: sv-agent --use-api chat\n"
+        
+        return f"""I'm SV-Agent, your domain-specific agent for structural variant analysis using GATK-SV.{mode_info}
 
 Here's what I can help you with:
 
@@ -397,6 +409,11 @@ Here's what I can help you with:
 - "What are structural variants?"
 - "How long will my analysis take?"
 - "Should I include related samples?"
+
+**🚀 Execution Modes:**
+- Local: sv-agent chat (uses local model)
+- API: sv-agent --use-api chat (fast cloud models)
+- KB-only: sv-agent --kb-only chat (fastest, no LLM)
 
 Type your question or command, and I'll help you with your SV analysis!"""
     

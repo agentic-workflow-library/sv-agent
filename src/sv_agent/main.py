@@ -64,6 +64,11 @@ Examples:
         help='API token for Hugging Face Inference API (or set HF_TOKEN env var)'
     )
     parser.add_argument(
+        '--kb-only',
+        action='store_true',
+        help='Use knowledge base only, no LLM (fastest startup, basic responses)'
+    )
+    parser.add_argument(
         '--device',
         choices=['cuda', 'cpu', 'auto'],
         default='auto',
@@ -300,6 +305,7 @@ Examples:
                 "model_id": args.model,
                 "use_api": args.use_api,
                 "api_token": args.api_token,
+                "kb_only": args.kb_only,
                 "device": args.device if args.device != 'auto' else None,
                 "load_in_8bit": args.load_in_8bit,
                 "load_in_4bit": args.load_in_4bit,
@@ -313,11 +319,15 @@ Examples:
             if not args.no_banner:
                 print("🧬 SV-Agent Interactive Chat")
                 print("=" * 50)
-                if args.use_api:
-                    print(f"Using API: Hugging Face Inference API")
+                if args.kb_only:
+                    print("Mode: Knowledge Base Only (no LLM)")
+                    print("Features: Fast responses, module info, structured knowledge")
+                elif args.use_api:
+                    print(f"Mode: API")
                     print(f"Model: {args.model if args.model != default_model else 'mistralai/Mixtral-8x7B-Instruct-v0.1'}")
                 else:
-                    print(f"Using model: {args.model}")
+                    print(f"Mode: Local Model")
+                    print(f"Model: {args.model}")
                 print("Ask me about GATK-SV, structural variants, or workflow conversion.")
                 print("Type 'help' for guidance or 'exit' to quit.\n")
             
@@ -344,6 +354,7 @@ Examples:
                 "model_id": args.model,
                 "use_api": args.use_api,
                 "api_token": args.api_token,
+                "kb_only": args.kb_only,
                 "device": args.device if args.device != 'auto' else None,
                 "load_in_8bit": args.load_in_8bit,
                 "load_in_4bit": args.load_in_4bit,
