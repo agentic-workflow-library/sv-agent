@@ -181,10 +181,26 @@ pytest tests/test_llm_chat.py --run-integration
 pytest tests/test_llm_chat.py --run-integration --ollama-model gemma:7b
 ```
 
+## Performance Tips
+
+For faster chat responses, you can use the Hugging Face Inference API instead of local models:
+
+```bash
+# Get a free API token at https://huggingface.co/settings/tokens
+export HF_TOKEN="your_token_here"
+
+# Use API mode for instant responses
+sv-agent --use-api chat
+sv-agent --use-api ask "What is a structural variant?"
+```
+
+See [API_SETUP.md](API_SETUP.md) for detailed API configuration options.
+
 ## Documentation
 
 - [Chat Interface Guide](docs/chat-interface.md) - Detailed chat documentation
 - [Chat Examples](docs/chat-examples.md) - Real-world usage examples
+- [API Setup Guide](API_SETUP.md) - Configure API for faster responses
 - [AWL Handbook](https://github.com/agentic-workflow-library/awl-handbook) - Framework documentation
 
 ## License

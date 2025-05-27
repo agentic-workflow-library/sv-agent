@@ -55,6 +55,15 @@ Examples:
         help=f'Model path - can be HuggingFace ID or local directory path (default: {default_model})'
     )
     parser.add_argument(
+        '--use-api',
+        action='store_true',
+        help='Use Hugging Face Inference API instead of local model (much faster!)'
+    )
+    parser.add_argument(
+        '--api-token',
+        help='API token for Hugging Face Inference API (or set HF_TOKEN env var)'
+    )
+    parser.add_argument(
         '--device',
         choices=['cuda', 'cpu', 'auto'],
         default='auto',
@@ -286,9 +295,11 @@ Examples:
                     print(f"  {module_id:<12} - {info['name']}")
         
         elif args.command == "chat":
-            # Configure HuggingFace model
+            # Configure LLM
             llm_config = {
                 "model_id": args.model,
+                "use_api": args.use_api,
+                "api_token": args.api_token,
                 "device": args.device if args.device != 'auto' else None,
                 "load_in_8bit": args.load_in_8bit,
                 "load_in_4bit": args.load_in_4bit,
@@ -302,7 +313,11 @@ Examples:
             if not args.no_banner:
                 print("🧬 SV-Agent Interactive Chat")
                 print("=" * 50)
-                print(f"Using model: {args.model}")
+                if args.use_api:
+                    print(f"Using API: Hugging Face Inference API")
+                    print(f"Model: {args.model if args.model != default_model else 'mistralai/Mixtral-8x7B-Instruct-v0.1'}")
+                else:
+                    print(f"Using model: {args.model}")
                 print("Ask me about GATK-SV, structural variants, or workflow conversion.")
                 print("Type 'help' for guidance or 'exit' to quit.\n")
             
@@ -324,9 +339,11 @@ Examples:
                     print(f"\nSV-Agent: Sorry, I encountered an error: {e}\n")
         
         elif args.command == "ask":
-            # Configure HuggingFace model
+            # Configure LLM
             llm_config = {
                 "model_id": args.model,
+                "use_api": args.use_api,
+                "api_token": args.api_token,
                 "device": args.device if args.device != 'auto' else None,
                 "load_in_8bit": args.load_in_8bit,
                 "load_in_4bit": args.load_in_4bit,

@@ -119,6 +119,8 @@ class SVKnowledgeBase:
             
             "What is sv-agent?": "sv-agent is a tool that can: 1) Execute CWL workflows to run GATK-SV analysis on your genomic data, 2) Convert GATK-SV WDL workflows to CWL format, 3) Process BAM/CRAM files to detect structural variants, 4) Provide expert guidance on SV analysis. Use 'sv-agent run' to execute workflows.",
             
+            "What is an SV?": "A structural variant (SV) is a genomic alteration typically larger than 50 base pairs. SVs include deletions (loss of DNA), duplications (extra copies), inversions (flipped orientation), insertions (new sequence), and translocations (rearrangements between chromosomes). They are a major source of genetic variation and can cause disease.",
+            
             "What are structural variants?": "Structural variants (SVs) are genomic alterations larger than 50bp, including deletions (DEL), duplications (DUP), inversions (INV), insertions (INS), and translocations (BND). They contribute significantly to genetic diversity and disease.",
             
             "What input data do I need?": "You need: 1) Aligned BAM or CRAM files (whole genome sequencing, >30x coverage recommended), 2) Reference genome (matching your alignment), 3) Sample metadata (sex, batch information)",
@@ -210,32 +212,48 @@ class SVKnowledgeBase:
         query_lower = query.lower()
         results = []
         
-        # Search FAQs
+        # First check for exact FAQ matches
         for question, answer in self.faq.items():
-            if query_lower in question.lower() or query_lower in answer.lower():
+            question_lower = question.lower()
+            # Exact match or very close match
+            if query_lower == question_lower or query_lower.rstrip('?') == question_lower.rstrip('?'):
+                results.insert(0, {  # Put at front
+                    "type": "FAQ",
+                    "question": question,
+                    "answer": answer,
+                    "score": 100  # Perfect match
+                })
+            # Check if query words are all in question
+            elif all(word in question_lower for word in query_lower.split()):
                 results.append({
                     "type": "FAQ",
                     "question": question,
-                    "answer": answer
+                    "answer": answer,
+                    "score": 50  # Good match
                 })
         
         # Search modules
         for module_id, module_info in self.modules.items():
-            if query_lower in str(module_info).lower():
+            if query_lower in module_id.lower() or query_lower in module_info.get('name', '').lower():
                 results.append({
                     "type": "Module",
                     "id": module_id,
-                    "info": module_info
+                    "info": module_info,
+                    "score": 40
                 })
         
         # Search SV types
         for sv_type, sv_info in self.sv_types.items():
-            if query_lower in str(sv_info).lower():
+            if query_lower in sv_type.lower() or query_lower in sv_info.get('name', '').lower():
                 results.append({
                     "type": "SV Type",
                     "id": sv_type,
-                    "info": sv_info
+                    "info": sv_info,
+                    "score": 40
                 })
+        
+        # Sort by score if available
+        results.sort(key=lambda x: x.get('score', 0), reverse=True)
         
         return results
     

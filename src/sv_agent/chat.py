@@ -20,33 +20,78 @@ class SVAgentChat(ChatInterface):
     """Interactive chat interface for SV-Agent."""
     
     def __init__(self, agent: Optional[SVAgent] = None, llm_config: Optional[Dict[str, Any]] = None):
-        """Initialize SV-specific chat interface with HuggingFace model."""
+        """Initialize SV-specific chat interface with LLM provider."""
         # Initialize base chat interface
         sv_agent = agent or SVAgent()
         
-        # Always use HuggingFace provider
-        from awlkit.llm import get_huggingface_provider
-        HuggingFaceProvider = get_huggingface_provider()
-        
         config = llm_config or {}
         
-        # Check for local Gemma model as default
-        from pathlib import Path
-        default_model = "microsoft/phi-2"  # Non-gated fallback model
-        if Path("models/gemma-latest").exists():
-            default_model = "models/gemma-latest"
-        elif Path("models/default_model.txt").exists():
-            default_model = Path("models/default_model.txt").read_text().strip()
+        # Determine which provider to use
+        provider_type = config.get("provider", "local")
+        
+        if provider_type == "api" or config.get("use_api", False):
+            # Use HF Inference API for fast responses
+            from awlkit.llm import get_hf_inference_provider
+            HFInferenceProvider = get_hf_inference_provider()
             
-        llm = HuggingFaceProvider(
-            model_id=config.get("model_id", default_model),
-            device=config.get("device"),
-            load_in_8bit=config.get("load_in_8bit", False),
-            load_in_4bit=config.get("load_in_4bit", False),
-            trust_remote_code=config.get("trust_remote_code", False),
-            cache_dir=config.get("cache_dir"),
-            auth_token=config.get("auth_token")
-        )
+            # Use a model that works without auth if no token provided
+            default_api_model = "microsoft/Phi-3.5-mini-instruct" if not config.get("api_token") else "mistralai/Mixtral-8x7B-Instruct-v0.1"
+            
+            llm = HFInferenceProvider(
+                model_id=config.get("model_id", default_api_model),
+                api_token=config.get("api_token")
+            )
+            logger.info(f"Using HF Inference API with model {llm.model_id}")
+        else:
+            # Use local HuggingFace model
+            from awlkit.llm import get_huggingface_provider
+            HuggingFaceProvider = get_huggingface_provider()
+            
+            # Try to find local models intelligently
+            from pathlib import Path
+            import os
+            
+            default_model = None
+            
+            # First check if a model is specified in config
+            if config.get("model_id"):
+                default_model = config["model_id"]
+            else:
+                # Look for local models in common locations
+                model_dirs = [
+                    Path("models"),
+                    Path("./models"),
+                    Path(os.path.expanduser("~/.cache/huggingface")),
+                    Path("/workspaces/sv-agent/models")
+                ]
+                
+                for model_dir in model_dirs:
+                    if model_dir.exists():
+                        # Look for any subdirectory that looks like a model
+                        for item in model_dir.iterdir():
+                            if item.is_dir() and any(f in item.name.lower() for f in ["gemma", "llama", "phi", "mistral"]):
+                                # Check if it has model files
+                                if any(item.glob("*.bin")) or any(item.glob("*.safetensors")) or (item / "config.json").exists():
+                                    default_model = str(item)
+                                    logger.info(f"Found local model: {default_model}")
+                                    break
+                        if default_model:
+                            break
+                
+                # If no local model found, use a small public model
+                if not default_model:
+                    default_model = "microsoft/phi-2"
+                    logger.warning(f"No local model found, defaulting to {default_model}. This will download ~5GB on first use.")
+                
+            llm = HuggingFaceProvider(
+                model_id=config.get("model_id", default_model),
+                device=config.get("device"),
+                load_in_8bit=config.get("load_in_8bit", False),
+                load_in_4bit=config.get("load_in_4bit", False),
+                trust_remote_code=config.get("trust_remote_code", False),
+                cache_dir=config.get("cache_dir"),
+                auth_token=config.get("auth_token")
+            )
         
         super().__init__(sv_agent, llm)
         
@@ -100,8 +145,16 @@ class SVAgentChat(ChatInterface):
             
         except Exception as e:
             logger.error(f"LLM generation failed: {e}")
-            # Fall back to knowledge search
-            return self._handle_knowledge_search(query)
+            
+            # If it's an API auth error, provide helpful guidance and fall back to knowledge base
+            if "401" in str(e) or "Invalid username" in str(e):
+                logger.info("API requires authentication, falling back to knowledge base")
+                kb_response = self._handle_knowledge_search(query)
+                
+                return f"{kb_response}\n\n💡 **Tip:** For faster AI-powered responses, get a free API token:\n1. Visit https://huggingface.co/settings/tokens\n2. Create a token with 'read' permissions\n3. Run: export HF_TOKEN='your_token_here'\n4. Use: sv-agent --use-api ask 'your question'"
+            else:
+                # For other errors, report them clearly
+                return f"❌ **Error: Cannot generate response**\n\nThe LLM model failed to load or generate a response.\n\nError: {str(e)}\n\nPlease ensure you have a valid model installed. You can:\n1. Specify a model with --model flag\n2. Download a model from Hugging Face\n3. Check that your model path is correct"
     
     def _get_relevant_knowledge(self, query: str) -> str:
         """Get relevant knowledge context for the query."""
@@ -135,18 +188,28 @@ class SVAgentChat(ChatInterface):
         """Override base method with SV-specific intent detection."""
         query_lower = query.lower()
         
-        # Check for SV-specific intents
-        if any(word in query_lower for word in ["sv", "structural variant", "deletion", "duplication"]):
-            return "explain"
-        elif any(word in query_lower for word in ["module", "gatk-sv", "pipeline"]):
-            return "explain"
-        elif any(word in query_lower for word in ["coverage", "quality", "filter"]):
-            return "recommend"
-        elif any(word in query_lower for word in ["error", "failed", "problem"]):
-            return "troubleshoot"
+        # For general questions like "what is X", use the LLM
+        if query_lower.startswith(("what is", "what are", "how do", "why", "when", "who", "define", "explain what")):
+            return "general"
         
-        # Fall back to base implementation
-        return super()._parse_intent(query)
+        # Check for specific command-like intents
+        if "explain module" in query_lower or "describe module" in query_lower:
+            return "explain"
+        elif any(word in query_lower for word in ["convert", "transform"]):
+            return "convert" 
+        elif any(word in query_lower for word in ["analyze", "analysis"]):
+            return "analyze"
+        elif any(word in query_lower for word in ["run", "execute"]):
+            return "run"
+        elif any(word in query_lower for word in ["recommend", "best practice", "should i"]):
+            return "recommend"
+        elif any(word in query_lower for word in ["error", "failed", "problem", "troubleshoot"]):
+            return "troubleshoot"
+        elif any(word in query_lower for word in ["help", "what can you"]):
+            return "help"
+        
+        # Default to general LLM handling for open-ended questions
+        return "general"
     
     def _handle_sv_help(self, query: str) -> str:
         """Handle SV-specific help requests."""
