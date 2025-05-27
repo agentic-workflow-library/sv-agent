@@ -1,28 +1,33 @@
 """Chat interface for SV-Agent - Interactive domain-specific agent."""
 
-import json
 import asyncio
-from typing import Dict, Any, List, Optional, Callable
-from pathlib import Path
+import json
+from typing import Dict, Any, Optional
 import re
 import logging
 
+from awlkit.agents import ChatInterface
+from awlkit.llm import detect_available_provider
+from awlkit.llm.utils import format_prompt_for_sv_domain
+
 from .agent import SVAgent
 from .knowledge import SVKnowledgeBase
-from .llm import detect_available_provider, OllamaProvider, RuleBasedProvider
-from .llm.utils import ConversationMemory, format_prompt_for_sv_domain
 
 
 logger = logging.getLogger(__name__)
 
 
-class SVAgentChat:
+class SVAgentChat(ChatInterface):
     """Interactive chat interface for SV-Agent."""
     
     def __init__(self, agent: Optional[SVAgent] = None, llm_provider=None,
                  llm_config: Optional[Dict[str, Any]] = None):
-        """Initialize chat interface."""
-        self.agent = agent or SVAgent()
+        """Initialize SV-specific chat interface."""
+        # Initialize base chat interface
+        sv_agent = agent or SVAgent()
+        super().__init__(sv_agent, llm_provider)
+        
+        # SV-specific attributes
         self.knowledge = SVKnowledgeBase()
         self.context = {
             "current_module": None,
@@ -30,91 +35,46 @@ class SVAgentChat:
             "last_results": None
         }
         
-        # Initialize LLM provider
-        if llm_provider == "none":
-            self.llm = RuleBasedProvider(self.knowledge)
-        else:
-            self.llm = llm_provider or self._initialize_llm(llm_config)
-        
-        # Conversation memory for multi-turn interactions
-        self.memory = ConversationMemory()
-        
-        # Check if we're using a capable LLM
-        self.has_llm = not isinstance(self.llm, RuleBasedProvider)
-        logger.info(f"Initialized chat with LLM provider: {type(self.llm).__name__}")
-        
-        # Define intent handlers
-        self.handlers = {
-            "help": self._handle_help,
-            "explain": self._handle_explain,
-            "convert": self._handle_convert,
-            "analyze": self._handle_analyze,
-            "run": self._handle_run,
-            "status": self._handle_status,
-            "recommend": self._handle_recommend,
-            "troubleshoot": self._handle_troubleshoot
-        }
+        # Register SV-specific handlers
+        self._register_sv_handlers()
     
-    def _initialize_llm(self, config: Optional[Dict[str, Any]] = None) -> Any:
-        """Initialize LLM provider based on configuration."""
-        config = config or {}
-        
-        # Try to detect from config
-        if config.get("provider") == "ollama":
-            return OllamaProvider(
-                model=config.get("model", "llama2:13b"),
-                base_url=config.get("url", "http://localhost:11434")
-            )
-        
-        # Auto-detect
-        return detect_available_provider(config.get("provider"))
+    def _register_sv_handlers(self):
+        """Register SV-specific intent handlers."""
+        # Override base handlers with SV-specific ones
+        self.register_handler('help', self._handle_sv_help)
+        self.register_handler('explain', self._handle_explain)
+        self.register_handler('convert', self._handle_sv_convert)
+        self.register_handler('analyze', self._handle_sv_analyze)
+        self.register_handler('run', self._handle_run)
+        self.register_handler('status', self._handle_status)
+        self.register_handler('recommend', self._handle_recommend)
+        self.register_handler('troubleshoot', self._handle_troubleshoot)
     
-    def chat(self, message: str) -> str:
-        """Process a chat message and return response."""
-        # If we have a capable LLM, use it for natural conversation
-        if self.has_llm:
-            return self._handle_llm_chat(message)
+    def _handle_general_query(self, query: str) -> str:
+        """Override base method to handle SV-specific queries."""
+        # Get relevant SV knowledge
+        knowledge_context = self._get_relevant_knowledge(query)
         
-        # Otherwise fall back to rule-based routing
-        intent, params = self._parse_intent(message)
+        # Format prompt with SV domain context
+        context = self.memory.get_context()
+        prompt = format_prompt_for_sv_domain(
+            query,
+            context=f"{context}\n\nRelevant Knowledge:\n{knowledge_context}"
+        )
         
-        # Route to appropriate handler
-        if intent in self.handlers:
-            return self.handlers[intent](params)
-        
-        # Default to knowledge search
-        return self._handle_knowledge_search(message)
-    
-    def _handle_llm_chat(self, message: str) -> str:
-        """Handle chat using LLM for natural conversation."""
         try:
-            # Get conversation context
-            context = self.memory.get_context()
-            
-            # Get relevant knowledge
-            knowledge_context = self._get_relevant_knowledge(message)
-            
-            # Format prompt with SV domain context
-            prompt = format_prompt_for_sv_domain(
-                message,
-                context=f"{context}\n\nRelevant Knowledge:\n{knowledge_context}"
-            )
-            
-            # Generate response (handle async properly)
+            # Generate response
             if asyncio.iscoroutinefunction(self.llm.generate):
                 response = asyncio.run(self.llm.generate(prompt))
             else:
                 response = self.llm.generate(prompt)
             
-            # Store in memory
-            self.memory.add_turn(message, response)
-            
             return response
             
         except Exception as e:
             logger.error(f"LLM generation failed: {e}")
-            # Fall back to rule-based response
-            return self._handle_knowledge_search(message)
+            # Fall back to knowledge search
+            return self._handle_knowledge_search(query)
     
     def _get_relevant_knowledge(self, query: str) -> str:
         """Get relevant knowledge context for the query."""
@@ -144,39 +104,25 @@ class SVAgentChat:
         
         return "\n".join(context_parts)
     
-    def _parse_intent(self, message: str) -> tuple[str, Dict[str, Any]]:
-        """Parse user intent from message."""
-        message_lower = message.lower()
+    def _parse_intent(self, query: str) -> str:
+        """Override base method with SV-specific intent detection."""
+        query_lower = query.lower()
         
-        # Check for specific intents
-        if any(word in message_lower for word in ["help", "what can you do", "capabilities"]):
-            return "help", {}
+        # Check for SV-specific intents
+        if any(word in query_lower for word in ["sv", "structural variant", "deletion", "duplication"]):
+            return "explain"
+        elif any(word in query_lower for word in ["module", "gatk-sv", "pipeline"]):
+            return "explain"
+        elif any(word in query_lower for word in ["coverage", "quality", "filter"]):
+            return "recommend"
+        elif any(word in query_lower for word in ["error", "failed", "problem"]):
+            return "troubleshoot"
         
-        elif any(word in message_lower for word in ["explain", "what is", "tell me about"]):
-            return "explain", {"query": message}
-        
-        elif any(word in message_lower for word in ["convert", "cwl", "wdl to cwl"]):
-            return "convert", {"query": message}
-        
-        elif any(word in message_lower for word in ["analyze", "check", "inspect"]):
-            return "analyze", {"query": message}
-        
-        elif any(word in message_lower for word in ["run", "execute", "process"]):
-            return "run", {"query": message}
-        
-        elif any(word in message_lower for word in ["status", "progress", "current"]):
-            return "status", {}
-        
-        elif any(word in message_lower for word in ["recommend", "suggest", "should i"]):
-            return "recommend", {"query": message}
-        
-        elif any(word in message_lower for word in ["error", "problem", "issue", "troubleshoot"]):
-            return "troubleshoot", {"query": message}
-        
-        return "search", {"query": message}
+        # Fall back to base implementation
+        return super()._parse_intent(query)
     
-    def _handle_help(self, params: Dict[str, Any]) -> str:
-        """Handle help requests."""
+    def _handle_sv_help(self, query: str) -> str:
+        """Handle SV-specific help requests."""
         return """I'm SV-Agent, your domain-specific agent for structural variant analysis using GATK-SV.
 
 Here's what I can help you with:
@@ -207,9 +153,8 @@ Here's what I can help you with:
 
 Type your question or command, and I'll help you with your SV analysis!"""
     
-    def _handle_explain(self, params: Dict[str, Any]) -> str:
-        """Handle explanation requests."""
-        query = params.get("query", "")
+    def _handle_explain(self, query: str) -> str:
+        """Handle SV-specific explanation requests."""
         
         # Check for module explanations
         module_match = re.search(r'module\s*(\d+[a-c]?)', query, re.IGNORECASE)
@@ -229,9 +174,8 @@ Type your question or command, and I'll help you with your SV analysis!"""
         # General knowledge search
         return self._handle_knowledge_search(query)
     
-    def _handle_convert(self, params: Dict[str, Any]) -> str:
-        """Handle conversion requests."""
-        query = params.get("query", "")
+    def _handle_sv_convert(self, query: str) -> str:
+        """Handle SV workflow conversion requests."""
         
         # Extract module names
         modules = re.findall(r'module\s*(\d+[a-c]?)', query, re.IGNORECASE)
@@ -276,9 +220,8 @@ The converted CWL files will be compatible with standard CWL runners like cwltoo
 agent.convert_gatksv_to_cwl(output_dir=Path("cwl_output"))
 ```"""
     
-    def _handle_analyze(self, params: Dict[str, Any]) -> str:
-        """Handle analysis requests."""
-        query = params.get("query", "")
+    def _handle_sv_analyze(self, query: str) -> str:
+        """Handle SV-specific analysis requests."""
         
         # Check for workflow analysis
         if "workflow" in query.lower():
@@ -332,8 +275,8 @@ samtools flagstat input.bam
         
         return "What would you like to analyze? Please specify workflows, samples, or results."
     
-    def _handle_run(self, params: Dict[str, Any]) -> str:
-        """Handle run/execution requests."""
+    def _handle_run(self, query: str) -> str:
+        """Handle SV pipeline run requests."""
         return """sv-agent can execute CWL workflows to run GATK-SV analysis:
 
 **1. First, convert WDL to CWL:**
@@ -378,8 +321,8 @@ sv-agent convert -o cwl_output
 sv-agent run cwl_output/GATKSVPipelineBatch.cwl batch_inputs.yaml
 ```"""
     
-    def _handle_status(self, params: Dict[str, Any]) -> str:
-        """Handle status requests."""
+    def _handle_status(self, query: str) -> str:
+        """Handle SV pipeline status requests."""
         if self.context["last_results"]:
             return f"""Current status:
 
@@ -398,11 +341,11 @@ I'm ready to help with:
 
 What would you like to do?"""
     
-    def _handle_recommend(self, params: Dict[str, Any]) -> str:
-        """Handle recommendation requests."""
-        query = params.get("query", "").lower()
+    def _handle_recommend(self, query: str) -> str:
+        """Handle SV analysis recommendation requests."""
+        query_lower = query.lower()
         
-        if "coverage" in query:
+        if "coverage" in query_lower:
             return """**Coverage Recommendations for SV Detection:**
 
 ✅ **Optimal:** 30-50x mean coverage
@@ -425,7 +368,7 @@ What would you like to do?"""
 samtools depth -a input.bam | awk '{sum+=$3} END {print sum/NR}'
 ```"""
         
-        elif "samples" in query or "cohort" in query:
+        elif "samples" in query_lower or "cohort" in query_lower:
             return """**Sample/Cohort Recommendations:**
 
 📊 **Cohort Size:**
@@ -450,7 +393,7 @@ samtools depth -a input.bam | awk '{sum+=$3} END {print sum/NR}'
 - Include technical replicates if available
 - Document batch information in metadata"""
         
-        elif "filter" in query or "threshold" in query:
+        elif "filter" in query_lower or "threshold" in query_lower:
             return """**Filtering Recommendations:**
 
 🎯 **Quality Thresholds:**
@@ -475,9 +418,9 @@ Start with stringent filters, then relax based on validation results."""
         
         return self._search_best_practices(query)
     
-    def _handle_troubleshoot(self, params: Dict[str, Any]) -> str:
-        """Handle troubleshooting requests."""
-        query = params.get("query", "").lower()
+    def _handle_troubleshoot(self, query: str) -> str:
+        """Handle SV pipeline troubleshooting requests."""
+        query_lower = query.lower()
         
         common_issues = {
             "low calls": """**Troubleshooting Low SV Calls:**
@@ -547,7 +490,7 @@ Start with stringent filters, then relax based on validation results."""
         }
         
         for issue_key, solution in common_issues.items():
-            if issue_key in query:
+            if issue_key in query_lower:
                 return solution
         
         return """What issue are you experiencing? Common problems include:
