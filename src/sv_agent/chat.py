@@ -7,7 +7,6 @@ import re
 import logging
 
 from awlkit.agents import ChatInterface
-from awlkit.llm import detect_available_provider
 from awlkit.llm.utils import format_prompt_for_sv_domain
 
 from .agent import SVAgent
@@ -20,12 +19,36 @@ logger = logging.getLogger(__name__)
 class SVAgentChat(ChatInterface):
     """Interactive chat interface for SV-Agent."""
     
-    def __init__(self, agent: Optional[SVAgent] = None, llm_provider=None,
-                 llm_config: Optional[Dict[str, Any]] = None):
-        """Initialize SV-specific chat interface."""
+    def __init__(self, agent: Optional[SVAgent] = None, llm_config: Optional[Dict[str, Any]] = None):
+        """Initialize SV-specific chat interface with HuggingFace model."""
         # Initialize base chat interface
         sv_agent = agent or SVAgent()
-        super().__init__(sv_agent, llm_provider)
+        
+        # Always use HuggingFace provider
+        from awlkit.llm import get_huggingface_provider
+        HuggingFaceProvider = get_huggingface_provider()
+        
+        config = llm_config or {}
+        
+        # Check for local Gemma model as default
+        from pathlib import Path
+        default_model = "microsoft/phi-2"  # Non-gated fallback model
+        if Path("models/gemma-latest").exists():
+            default_model = "models/gemma-latest"
+        elif Path("models/default_model.txt").exists():
+            default_model = Path("models/default_model.txt").read_text().strip()
+            
+        llm = HuggingFaceProvider(
+            model_id=config.get("model_id", default_model),
+            device=config.get("device"),
+            load_in_8bit=config.get("load_in_8bit", False),
+            load_in_4bit=config.get("load_in_4bit", False),
+            trust_remote_code=config.get("trust_remote_code", False),
+            cache_dir=config.get("cache_dir"),
+            auth_token=config.get("auth_token")
+        )
+        
+        super().__init__(sv_agent, llm)
         
         # SV-specific attributes
         self.knowledge = SVKnowledgeBase()
@@ -37,6 +60,10 @@ class SVAgentChat(ChatInterface):
         
         # Register SV-specific handlers
         self._register_sv_handlers()
+        
+    def chat(self, query: str) -> str:
+        """Compatibility method that forwards to process_query."""
+        return self.process_query(query)
     
     def _register_sv_handlers(self):
         """Register SV-specific intent handlers."""

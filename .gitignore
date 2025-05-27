@@ -90,3 +90,9 @@ temp/
 # Credentials
 .git-credentials*
 *_token*
+
+# Model files
+models/
+*.bin
+*.safetensors
+*.gguf

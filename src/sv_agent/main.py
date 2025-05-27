@@ -29,9 +29,9 @@ Examples:
   sv-agent convert -i gatk-sv/wdl -o src/sv_agent/cwl
   sv-agent convert -i gatk-sv/wdl -o src/sv_agent/cwl -m GatherSampleEvidence
   sv-agent chat
+  sv-agent chat --model /path/to/local/model
   sv-agent ask "What coverage do I need for SV detection?"
   sv-agent analyze GATKSVPipelineBatch
-  sv-agent chat --llm-provider ollama --ollama-model codellama:13b
         """
     )
     
@@ -41,22 +41,42 @@ Examples:
         help='Enable verbose logging'
     )
     
-    # LLM configuration options
+    # Model configuration options
+    # Check for local Gemma model
+    default_model = 'microsoft/phi-2'  # Non-gated fallback model
+    if Path('models/gemma-latest').exists():
+        default_model = 'models/gemma-latest'
+    elif Path('models/default_model.txt').exists():
+        default_model = Path('models/default_model.txt').read_text().strip()
+    
     parser.add_argument(
-        '--llm-provider',
-        choices=['ollama', 'openai', 'anthropic', 'auto', 'none'],
+        '--model',
+        default=default_model,
+        help=f'Model path - can be HuggingFace ID or local directory path (default: {default_model})'
+    )
+    parser.add_argument(
+        '--device',
+        choices=['cuda', 'cpu', 'auto'],
         default='auto',
-        help='LLM provider to use (default: auto-detect)'
+        help='Device for model inference (default: auto)'
     )
     parser.add_argument(
-        '--ollama-model',
-        default='llama2:13b',
-        help='Ollama model to use (default: llama2:13b)'
+        '--load-in-8bit',
+        action='store_true',
+        help='Load model in 8-bit precision'
     )
     parser.add_argument(
-        '--ollama-url',
-        default='http://localhost:11434',
-        help='Ollama API URL (default: http://localhost:11434)'
+        '--load-in-4bit',
+        action='store_true',
+        help='Load model in 4-bit precision'
+    )
+    parser.add_argument(
+        '--auth-token',
+        help='HuggingFace authentication token for gated models'
+    )
+    parser.add_argument(
+        '--cache-dir',
+        help='Directory to cache downloaded models'
     )
     
     # Create subcommands
@@ -266,30 +286,23 @@ Examples:
                     print(f"  {module_id:<12} - {info['name']}")
         
         elif args.command == "chat":
-            # Initialize LLM provider based on args
+            # Configure HuggingFace model
             llm_config = {
-                "provider": args.llm_provider,
-                "model": args.ollama_model,
-                "url": args.ollama_url
+                "model_id": args.model,
+                "device": args.device if args.device != 'auto' else None,
+                "load_in_8bit": args.load_in_8bit,
+                "load_in_4bit": args.load_in_4bit,
+                "auth_token": args.auth_token,
+                "cache_dir": args.cache_dir
             }
             
-            # Handle special case for no LLM
-            llm_provider = None
-            if args.llm_provider == "none":
-                llm_provider = "none"
-            
             # Interactive chat
-            chat = SVAgentChat(agent, llm_provider=llm_provider, llm_config=llm_config)
+            chat = SVAgentChat(agent, llm_config=llm_config)
             
             if not args.no_banner:
                 print("🧬 SV-Agent Interactive Chat")
                 print("=" * 50)
-                
-                if chat.has_llm:
-                    print(f"Using LLM: {type(chat.llm).__name__}")
-                else:
-                    print("Running in rule-based mode (no LLM)")
-                
+                print(f"Using model: {args.model}")
                 print("Ask me about GATK-SV, structural variants, or workflow conversion.")
                 print("Type 'help' for guidance or 'exit' to quit.\n")
             
@@ -311,20 +324,18 @@ Examples:
                     print(f"\nSV-Agent: Sorry, I encountered an error: {e}\n")
         
         elif args.command == "ask":
-            # Initialize LLM provider based on args
+            # Configure HuggingFace model
             llm_config = {
-                "provider": args.llm_provider,
-                "model": args.ollama_model,
-                "url": args.ollama_url
+                "model_id": args.model,
+                "device": args.device if args.device != 'auto' else None,
+                "load_in_8bit": args.load_in_8bit,
+                "load_in_4bit": args.load_in_4bit,
+                "auth_token": args.auth_token,
+                "cache_dir": args.cache_dir
             }
             
-            # Handle special case for no LLM
-            llm_provider = None
-            if args.llm_provider == "none":
-                llm_provider = "none"
-            
             # Single question
-            chat = SVAgentChat(agent, llm_provider=llm_provider, llm_config=llm_config)
+            chat = SVAgentChat(agent, llm_config=llm_config)
             question = " ".join(args.question)
             response = chat.chat(question)
             print(response)
