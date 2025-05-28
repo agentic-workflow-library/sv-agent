@@ -6,7 +6,7 @@ A Python command-line tool for converting GATK-SV WDL workflows to CWL format an
 
 - **WDL to CWL Conversion**: Convert GATK-SV workflows from WDL to CWL format
 - **Interactive Chat Interface**: Get expert guidance on SV analysis with natural language
-- **LLM Integration**: Support for local (Ollama) and cloud LLMs in air-gapped environments  
+- **LLM Integration**: Support for local and cloud LLMs in air-gapped environments  
 - **Workflow Analysis**: Analyze and understand GATK-SV workflow structure
 - **Domain Expertise**: Built-in knowledge of GATK-SV modules, best practices, and troubleshooting
 - **Command-line Interface**: Simple, focused CLI for all operations
@@ -214,13 +214,13 @@ sv-agent --kb-only ask "What is Module00a?"
 - **Local Mode**: 10-30 seconds, works offline, good AI responses  
 - **KB-Only Mode**: <1 second, works offline, structured knowledge only
 
-See [API_SETUP.md](API_SETUP.md) for detailed API configuration options.
+See [API_SETUP.md](docs/API_SETUP.md) for detailed API configuration options.
 
 ## Documentation
 
 - [Chat Interface Guide](docs/chat-interface.md) - Detailed chat documentation
 - [Chat Examples](docs/chat-examples.md) - Real-world usage examples
-- [API Setup Guide](API_SETUP.md) - Configure API for faster responses
+- [API Setup Guide](docs/API_SETUP.md) - Configure API for faster responses
 - [AWL Handbook](https://github.com/agentic-workflow-library/awl-handbook) - Framework documentation
 
 ## License

@@ -66,7 +66,7 @@ sv-agent --load-in-8bit chat
 Run the test script:
 
 ```bash
-python test_huggingface_only.py
+python tests/test_huggingface_only.py
 ```
 
 This verifies:
